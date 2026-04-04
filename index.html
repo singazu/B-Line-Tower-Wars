@@ -14,7 +14,7 @@
         <div class="score-row">
           <span>Player: <strong id="player-score">0</strong></span>
           <span>AI: <strong id="ai-score">0</strong></span>
-          <span>Wave: <strong id="wave-number">1</strong></span>
+          <span>Round: <strong id="wave-number">1</strong></span>
         </div>
       </header>
 
@@ -30,11 +30,53 @@
               <span id="phase-label">Prep</span>
               <strong id="phase-timer">10.0</strong>
             </div>
+            <button class="battle-skip-btn" id="battle-skip-btn" type="button">Battle</button>
           </div>
           <div class="mana-widget" aria-label="Player mana">
             <img class="mana-icon" src="assets/ui/mana-icon.png" alt="" />
             <span class="mana-value" id="player-mana">9</span>
           </div>
+          <section class="shop-overlay hidden" id="shop-overlay" aria-label="Upgrade shop">
+            <div class="shop-card">
+              <div class="shop-header">
+                <div>
+                  <p class="shop-kicker">Between Rounds</p>
+                  <h2 id="shop-title">Upgrade one card</h2>
+                </div>
+              </div>
+              <p class="shop-copy">Click a tower or unit card to preview its upgrade.</p>
+              <div class="shop-preview">
+                <div class="shop-preview-label">Upgrade</div>
+                <div class="shop-preview-panel">
+                  <div class="shop-unit-name" id="shop-unit-name">Imp</div>
+                  <div class="shop-upgrade-flow">
+                    <div class="shop-unit-frame">
+                      <div class="attacker-icon-frame shop-icon-frame">
+                        <img class="attacker-icon-sheet shop-icon-sheet" id="shop-current-unit" src="assets/creeps/imp-sprite-sheet.png" alt="Current unit preview" />
+                      </div>
+                      <span class="shop-level" id="shop-level-current">Lv. 1</span>
+                    </div>
+                    <div class="shop-arrow" aria-hidden="true">→</div>
+                    <div class="shop-unit-frame">
+                      <div class="attacker-icon-frame shop-icon-frame shop-icon-frame-upgraded">
+                        <img class="attacker-icon-sheet shop-icon-sheet" id="shop-next-unit" src="assets/creeps/imp-sprite-sheet.png" alt="Upgraded unit preview" />
+                      </div>
+                      <span class="shop-level" id="shop-level-next">Lv. 2</span>
+                    </div>
+                  </div>
+                  <p class="shop-description" id="shop-description">Increase HP and speed by 10% for future Imps.</p>
+                </div>
+              </div>
+              <div class="shop-actions">
+                <button id="shop-upgrade-btn" type="button">Upgrade for 3 mana</button>
+                <button id="shop-start-btn" type="button">Start Round 2</button>
+              </div>
+            </div>
+          </section>
+          <section class="match-end-overlay hidden" id="match-end-overlay" aria-label="Match result">
+            <div class="match-end-banner match-end-banner-top" id="match-end-top">you win</div>
+            <div class="match-end-banner match-end-banner-bottom" id="match-end-bottom">get fuxked</div>
+          </section>
           <div class="slot-row player-slots" id="player-slots"></div>
         </div>
       </section>

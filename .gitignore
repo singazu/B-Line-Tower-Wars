@@ -16,4 +16,5 @@ desktop.ini
 # PowerShell artifacts
 *.ps1xml
 
+match-stats.json
 bri assets/

@@ -40,6 +40,49 @@ function Send-HttpResponse {
   }
 }
 
+function Get-DefaultStatsJson {
+  return @'
+{
+  "updatedAt": null,
+  "unitScores": {
+    "total": { "imp": 0, "runner": 0, "brute": 0, "wisp": 0, "tank": 0 },
+    "player": { "imp": 0, "runner": 0, "brute": 0, "wisp": 0, "tank": 0 },
+    "ai": { "imp": 0, "runner": 0, "brute": 0, "wisp": 0, "tank": 0 }
+  },
+  "towerKills": {
+    "total": { "violet": 0, "yellow": 0, "red": 0, "green": 0, "orange": 0 },
+    "player": { "violet": 0, "yellow": 0, "red": 0, "green": 0, "orange": 0 },
+    "ai": { "violet": 0, "yellow": 0, "red": 0, "green": 0, "orange": 0 }
+  },
+  "matchUsage": {
+    "attackers": {
+      "used": { "imp": 0, "runner": 0, "brute": 0, "wisp": 0, "tank": 0 },
+      "winningTeamUsed": { "imp": 0, "runner": 0, "brute": 0, "wisp": 0, "tank": 0 }
+    },
+    "towers": {
+      "used": { "violet": 0, "yellow": 0, "red": 0, "green": 0, "orange": 0 },
+      "winningTeamUsed": { "violet": 0, "yellow": 0, "red": 0, "green": 0, "orange": 0 }
+    }
+  }
+}
+'@
+}
+
+function Get-StatsPath {
+  param([string]$RootPath)
+  return Join-Path $RootPath "match-stats.json"
+}
+
+function Ensure-StatsFile {
+  param([string]$RootPath)
+
+  $statsPath = Get-StatsPath -RootPath $RootPath
+  if (-not (Test-Path -LiteralPath $statsPath -PathType Leaf)) {
+    [System.IO.File]::WriteAllText($statsPath, (Get-DefaultStatsJson), [System.Text.Encoding]::UTF8)
+  }
+  return $statsPath
+}
+
 $rootPath = [System.IO.Path]::GetFullPath($PSScriptRoot)
 
 Write-Host "Starting local preview server for simple-clicker-game..." -ForegroundColor Cyan
@@ -88,7 +131,7 @@ try {
 
     try {
       $stream = $client.GetStream()
-      $reader = New-Object System.IO.StreamReader($stream, [System.Text.Encoding]::ASCII, $false, 1024, $true)
+      $reader = New-Object System.IO.StreamReader($stream, [System.Text.Encoding]::UTF8, $false, 1024, $true)
 
       $requestLine = $reader.ReadLine()
       if ([string]::IsNullOrWhiteSpace($requestLine)) {
@@ -96,12 +139,81 @@ try {
       }
 
       $parts = $requestLine.Split(" ")
+      $method = "GET"
       $requestPath = "/"
+      if ($parts.Length -ge 1) {
+        $method = $parts[0].ToUpperInvariant()
+      }
       if ($parts.Length -ge 2) {
         $requestPath = [Uri]::UnescapeDataString($parts[1])
+        if ($requestPath -match '^https?://') {
+          try {
+            $requestPath = ([Uri]$requestPath).AbsolutePath
+          } catch {
+          }
+        }
+      }
+      $requestPath = $requestPath.Trim()
+      if ($requestPath.Length -gt 1) {
+        $requestPath = $requestPath.TrimEnd("/")
+      }
+      if ([string]::IsNullOrWhiteSpace($requestPath)) {
+        $requestPath = "/"
       }
 
+      $headers = @{}
       while (($line = $reader.ReadLine()) -ne $null -and $line -ne "") {
+        $separator = $line.IndexOf(":")
+        if ($separator -gt 0) {
+          $name = $line.Substring(0, $separator).Trim()
+          $value = $line.Substring($separator + 1).Trim()
+          $headers[$name] = $value
+        }
+      }
+
+      $bodyText = ""
+      $contentLength = 0
+      if ($headers.ContainsKey("Content-Length")) {
+        [int]::TryParse($headers["Content-Length"], [ref]$contentLength) | Out-Null
+      }
+      if ($contentLength -gt 0) {
+        $buffer = New-Object char[] $contentLength
+        $read = 0
+        while ($read -lt $contentLength) {
+          $count = $reader.Read($buffer, $read, $contentLength - $read)
+          if ($count -le 0) {
+            break
+          }
+          $read += $count
+        }
+        $bodyText = New-Object string($buffer, 0, $read)
+      }
+
+      if ($requestPath -eq "/stats") {
+        $statsPath = Ensure-StatsFile -RootPath $rootPath
+
+        if ($method -eq "GET") {
+          $bytes = [System.IO.File]::ReadAllBytes($statsPath)
+          Send-HttpResponse -Stream $stream -StatusCode 200 -Reason "OK" -BodyBytes $bytes -ContentType "application/json; charset=utf-8"
+          continue
+        }
+
+        if ($method -eq "POST") {
+          try {
+            $null = $bodyText | ConvertFrom-Json
+            [System.IO.File]::WriteAllText($statsPath, $bodyText, [System.Text.Encoding]::UTF8)
+            $bytes = [System.Text.Encoding]::UTF8.GetBytes('{"ok":true}')
+            Send-HttpResponse -Stream $stream -StatusCode 200 -Reason "OK" -BodyBytes $bytes -ContentType "application/json; charset=utf-8"
+          } catch {
+            $bytes = [System.Text.Encoding]::UTF8.GetBytes('{"ok":false,"error":"Invalid JSON"}')
+            Send-HttpResponse -Stream $stream -StatusCode 400 -Reason "Bad Request" -BodyBytes $bytes -ContentType "application/json; charset=utf-8"
+          }
+          continue
+        }
+
+        $bytes = [System.Text.Encoding]::UTF8.GetBytes("405 Method Not Allowed")
+        Send-HttpResponse -Stream $stream -StatusCode 405 -Reason "Method Not Allowed" -BodyBytes $bytes
+        continue
       }
 
       if ($requestPath -eq "/") {
