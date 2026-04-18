@@ -114,6 +114,7 @@ const playerScoreEl = document.getElementById("player-score");
 const aiScoreEl = document.getElementById("ai-score");
 const waveNumberEl = document.getElementById("wave-number");
 const playerManaEl = document.getElementById("player-mana");
+const shopManaValueEl = document.getElementById("shop-mana-value");
 const phaseLabelEl = document.getElementById("phase-label");
 const phaseTimerEl = document.getElementById("phase-timer");
 const waveProgressFillEl = document.getElementById("wave-progress-fill");
@@ -814,6 +815,7 @@ function towerPowerScore(tower) {
 }
 
 function resetMatch() {
+  _battleResolving = false;
   state.waveNumber = 1;
   state.phase = "banner";
   state.phaseTimer = PREP_SECONDS;
@@ -1167,6 +1169,7 @@ function refreshHUD() {
   aiScoreEl.textContent = String(state.aiScore);
   waveNumberEl.textContent = String(state.waveNumber);
   playerManaEl.textContent = String(state.playerMana);
+  if (shopManaValueEl) shopManaValueEl.textContent = String(state.playerMana);
   if (state.phase === "prep") {
     phaseLabelEl.textContent = "Prep";
   } else if (state.phase === "battle") {
@@ -1422,6 +1425,7 @@ function beginRoundBanner() {
 }
 
 function openRoundShop() {
+  console.warn(`[Game] openRoundShop called. waveNumber before increment=${state.waveNumber}`);
   const gain = 9 + state.waveNumber;
   state.playerMana = clamp(state.playerMana + gain, 0, MANA_CAP);
   state.aiMana = clamp(state.aiMana + gain, 0, MANA_CAP);
@@ -1467,6 +1471,7 @@ function buildMatchSummary() {
 }
 
 function finishMatch() {
+  console.warn(`[Game] finishMatch called. waveNumber=${state.waveNumber} playerScore=${state.playerScore} aiScore=${state.aiScore} multiplayerRole=${multiplayerRole}`);
   state.phase = "gameover";
   state.gameOver = true;
   if (state.playerScore === state.aiScore) {
@@ -1503,16 +1508,27 @@ function finishMatch() {
   refreshAllUI();
 }
 
+let _battleResolving = false;
 function onBattleFinished() {
+  if (_battleResolving) {
+    return;
+  }
+  _battleResolving = true;
+  console.warn(`[Game] onBattleFinished. wave=${state.waveNumber} multiplayerRole=${multiplayerRole}`);
+  const clearFlag = () => { _battleResolving = false; };
   if (multiplayerRole !== null && window.Lobby) {
-    window.Lobby.onMultiplayerBattleFinished();
+    Promise.resolve(window.Lobby.onMultiplayerBattleFinished()).finally(clearFlag);
     return;
   }
-  if (state.waveNumber >= MAX_ROUNDS) {
-    finishMatch();
-    return;
+  try {
+    if (state.waveNumber >= MAX_ROUNDS) {
+      finishMatch();
+      return;
+    }
+    openRoundShop();
+  } finally {
+    clearFlag();
   }
-  openRoundShop();
 }
 
 function applyTowerUpgradeToPlacedTowers(towerId) {

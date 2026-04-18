@@ -14,6 +14,7 @@
   let _disconnectOverlayEl        = null;
   let _opponentName               = "Opponent";
   let _scoreAtBattleStart         = 0;
+  let _aiScoreAtBattleStart       = 0;
   let _presenceUnwatch            = null;
   let _cancelBothReady            = null;
   let _isWaitingForOpponent       = false;
@@ -220,6 +221,7 @@
 
     // Record score snapshot before the battle starts
     _scoreAtBattleStart = state.playerScore;
+    _aiScoreAtBattleStart = state.aiScore;
 
     // Freeze the game loop while waiting — prevents launchWave() re-firing every frame
     state.phase = "waiting";
@@ -233,13 +235,18 @@
       battleSkipBtnEl.disabled    = true;
     }
 
+    console.warn(`[Lobby] submitPrepPhaseData called. role=${multiplayerRole} room=${multiplayerRoomId} wave=${state.waveNumber}`);
+
     // Submit to Firebase
     MP.submitPrepData(prepData).then(() => {
+      console.warn(`[Lobby] submitPrepData resolved. role=${multiplayerRole}`);
       // Listen for both players to be ready
       _cancelBothReady = MP.listenForBothReady((reason) => {
         _cancelBothReady = null;
         _isWaitingForOpponent = false;
         _setConnectionDot("connected");
+
+        console.warn(`[Lobby] listenForBothReady callback. reason=${reason || "both-ready"} role=${multiplayerRole}`);
 
         if (reason === "timeout") {
           // Opponent never submitted — treat as forfeit
@@ -310,16 +317,26 @@
   // ---------------------------------------------------------------------------
   async function onMultiplayerBattleFinished() {
     const roundScore = state.playerScore - _scoreAtBattleStart;
+    console.warn(`[Lobby] onMultiplayerBattleFinished. wave=${state.waveNumber} role=${multiplayerRole} score=${roundScore} playerScore=${state.playerScore} aiScore=${state.aiScore}`);
 
-    // Report score and reset ready flags for next round
-    await MP.completeBattle(state.waveNumber, roundScore).catch((err) => {
+    // Report my score, then receive the opponent's authoritative score.
+    const result = await MP.completeBattle(state.waveNumber, roundScore).catch((err) => {
       console.warn("[Lobby] completeBattle error:", err);
+      return { opponentScore: state.aiScore - _aiScoreAtBattleStart };
     });
+
+    // Reconcile opponent side using their own sim's round score (source of truth
+    // for what their attackers did), in case our local sim diverged.
+    const opponentRoundScore = (result && typeof result.opponentScore === "number") ? result.opponentScore : (state.aiScore - _aiScoreAtBattleStart);
+    state.aiScore = _aiScoreAtBattleStart + opponentRoundScore;
+    console.warn(`[Lobby] Reconciled scores. playerScore=${state.playerScore} aiScore=${state.aiScore}`);
 
     // Advance match the same way single-player does
     if (state.waveNumber >= MAX_ROUNDS) {
+      console.warn(`[Lobby] finishMatch branch. wave=${state.waveNumber} >= MAX_ROUNDS`);
       finishMatch();
     } else {
+      console.warn(`[Lobby] openRoundShop branch. wave=${state.waveNumber}`);
       openRoundShop();
     }
   }
@@ -328,6 +345,7 @@
   // Shop decision (called from script.js shopStartBtnEl hook)
   // ---------------------------------------------------------------------------
   function onShopStart() {
+    console.warn(`[Lobby] onShopStart. role=${multiplayerRole} wave=${state.waveNumber}`);
     if (multiplayerRole === null) return;
 
     // Submit the upgrade choice for records (non-blocking)
@@ -387,7 +405,7 @@
   function _handleOpponentForfeit(reason) {
     _hideDisconnectOverlay();
     _cancelDisconnectCountdown();
-    console.warn("[Lobby] Opponent forfeit, reason:", reason);
+    console.error(`[Lobby] Opponent forfeit fired. reason=${reason} role=${multiplayerRole} room=${multiplayerRoomId}`);
 
     // Award win to local player
     state.matchWinner = "player";
