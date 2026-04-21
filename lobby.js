@@ -336,7 +336,7 @@
       console.warn(`[Lobby] finishMatch branch. wave=${state.waveNumber} >= MAX_ROUNDS`);
       finishMatch();
     } else {
-      console.warn(`[Lobby] openRoundShop branch. wave=${state.waveNumber}`);
+      console.warn(`[Lobby] advance-to-next-round branch. wave=${state.waveNumber}`);
       openRoundShop();
     }
   }

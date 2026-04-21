@@ -1187,48 +1187,8 @@ function refreshHUD() {
 }
 
 function refreshShopUI() {
-  const inShop = state.phase === "shop";
-  shopOverlayEl.classList.toggle("hidden", !inShop);
-  if (!inShop) {
-    return;
-  }
-
-  const selectingTower = state.shopSelectionType === "tower";
-  const item = selectingTower
-    ? (getTowerDef(state.shopSelectionId) || towerDefs[0])
-    : (getAttackerDef(state.shopSelectionId) || attackerDefs[0]);
-  const upgradeLevel = selectingTower
-    ? getPlayerTowerUpgradeLevel(item.id)
-    : getPlayerUpgradeLevel(item.id);
-  const alreadyUpgraded = selectingTower
-    ? (state.playerTowerUpgrades[item.id] || 0) >= MAX_TOWER_UPGRADES
-    : upgradeLevel > 1;
-  const upgradeCost = selectingTower ? TOWER_UPGRADE_COST : SHOP_UPGRADE_COST;
-  const previewPath = selectingTower ? towerSpritePaths[item.id] : attackerSpriteConfig[item.id].path;
-  const effectText = selectingTower
-    ? "increase damage and range by 20%, and improve fire rate by 20%"
-    : "increase HP and speed by 10%";
-
-  shopTitleEl.textContent = `Upgrade one card before Round ${state.waveNumber}`;
-  shopUnitNameEl.textContent = item.name;
-  shopCurrentUnitEl.src = previewPath;
-  shopNextUnitEl.src = previewPath;
-  shopCurrentUnitEl.alt = `${item.name} current level`;
-  shopNextUnitEl.alt = `${item.name} upgraded level`;
-  shopCurrentUnitEl.classList.toggle("tower-preview", selectingTower);
-  shopNextUnitEl.classList.toggle("tower-preview", selectingTower);
-  shopLevelCurrentEl.textContent = `Lv. ${upgradeLevel}`;
-  shopLevelNextEl.textContent = `Lv. ${alreadyUpgraded ? upgradeLevel : upgradeLevel + 1}`;
-  shopDescriptionEl.textContent = alreadyUpgraded
-    ? `${item.name} is already upgraded. Its bonus stays active for the rest of the match.`
-    : `Spend ${upgradeCost} mana to ${effectText} for ${selectingTower ? "this tower type" : `future ${item.name}s`}.`;
-  shopUpgradeBtnEl.disabled = alreadyUpgraded || state.playerMana < upgradeCost;
-  shopUpgradeBtnEl.textContent = alreadyUpgraded
-    ? `${item.name} upgraded`
-    : state.playerMana < upgradeCost
-      ? `Need ${upgradeCost} mana`
-      : `Upgrade for ${upgradeCost} mana`;
-  shopStartBtnEl.textContent = `Start Round ${state.waveNumber}`;
+  // Between-round upgrade flow is disabled for faster-paced matches.
+  shopOverlayEl.classList.add("hidden");
 }
 
 function refreshMatchEndOverlay() {
@@ -1394,11 +1354,8 @@ function openRoundShop() {
   state.playerMana = clamp(state.playerMana + gain, 0, MANA_CAP);
   state.aiMana = clamp(state.aiMana + gain, 0, MANA_CAP);
   state.waveNumber += 1;
-  state.phase = "shop";
-  state.aiDraftDone = false;
-  clearSelectedTower();
-  refreshAllUI();
-  updateStatus(`Shop open. Spend mana, then start Round ${state.waveNumber}.`);
+  beginRoundBanner();
+  updateStatus(`Round ${state.waveNumber} begins soon.`);
 }
 
 function buildMatchSummary() {
@@ -1417,7 +1374,7 @@ function buildMatchSummary() {
     copy = `The AI held the lane ${state.aiScore} to ${state.playerScore}. Review your records, then adjust your next build.`;
   } else {
     title = "Draw";
-    copy = `Both commanders finished level at ${state.playerScore}. One sharper upgrade path can swing the rematch.`;
+    copy = `Both commanders finished level at ${state.playerScore}. A sharper lane plan can swing the rematch.`;
   }
 
   return {
