@@ -557,11 +557,19 @@ select {
 
 .shop-overlay,
 .match-end-overlay {
-  position: absolute;
-  inset: 1rem;
-  z-index: 6;
+  position: fixed;
+  inset:
+    calc(0.5rem + var(--safe-top))
+    calc(0.5rem + var(--safe-right))
+    calc(0.5rem + var(--safe-bottom))
+    calc(0.5rem + var(--safe-left));
+  z-index: 220;
   display: grid;
   align-items: center;
+  justify-items: center;
+  overflow: auto;
+  background: rgba(2, 6, 23, 0.48);
+  backdrop-filter: blur(2px);
 }
 
 .shop-card,
@@ -725,6 +733,9 @@ select {
 }
 
 .match-summary-card {
+  width: min(100%, 520px);
+  max-height: min(92dvh, calc(var(--app-height) - 1rem - var(--safe-top) - var(--safe-bottom)));
+  overflow: auto;
   padding-top: 1.15rem;
   padding-bottom: 1rem;
 }
@@ -957,6 +968,21 @@ button:disabled {
 
   .game-screen {
     gap: 0.45rem;
+  }
+
+  .shop-overlay,
+  .match-end-overlay {
+    align-items: start;
+    inset:
+      calc(0.35rem + var(--safe-top))
+      calc(0.35rem + var(--safe-right))
+      calc(0.35rem + var(--safe-bottom))
+      calc(0.35rem + var(--safe-left));
+  }
+
+  .match-summary-card {
+    width: 100%;
+    max-height: calc(var(--app-height) - 0.7rem - var(--safe-top) - var(--safe-bottom));
   }
 
   .top-bar {
