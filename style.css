@@ -946,6 +946,8 @@ button:disabled {
 
 @media (pointer: coarse) and (orientation: portrait) {
   .app-shell {
+    max-width: 460px;
+    margin: 0 auto;
     padding:
       calc(0.4rem + var(--safe-top))
       calc(0.45rem + var(--safe-right))
