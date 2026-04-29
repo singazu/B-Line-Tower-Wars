@@ -322,18 +322,15 @@ function resizeBattlefieldFrame() {
 }
 
 function updateOrientationNotice() {
-  const isPortrait = window.matchMedia("(orientation: portrait)").matches;
-  orientationNoticeEl.classList.toggle("hidden", !prefersTouchInput || !isPortrait);
+  if (!orientationNoticeEl) {
+    return;
+  }
+  // Portrait-first mobile UX: never block gameplay with orientation prompts.
+  orientationNoticeEl.classList.add("hidden");
 }
 
 async function lockLandscapeOrientation() {
-  if (prefersTouchInput && screen.orientation?.lock) {
-    try {
-      await screen.orientation.lock("landscape");
-    } catch {
-    }
-  }
-
+  // Intentionally no-op: do not force landscape on mobile.
   updateOrientationNotice();
 }
 
