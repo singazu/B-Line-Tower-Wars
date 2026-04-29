@@ -221,6 +221,7 @@ const state = {
 
 let activeDragPayload = "";
 let selectedTowerId = null;
+let touchDragState = null;
 let audioCtx = null;
 let audioUnlocked = false;
 let lastAppHiddenAt = null;
@@ -268,26 +269,21 @@ function isDesktopGameFitViewport() {
   return window.matchMedia("(min-width: 901px) and (pointer: fine)").matches;
 }
 
-function isMobilePortraitGameFitViewport() {
-  return window.matchMedia("(pointer: coarse) and (orientation: portrait)").matches;
-}
-
 function updateDesktopGameFit() {
   const shouldFitDesktopGame = state.screen === "game" && isDesktopGameFitViewport();
-  const shouldFitMobilePortraitGame = state.screen === "game" && isMobilePortraitGameFitViewport();
   appShellEl.classList.toggle("desktop-game-fit", shouldFitDesktopGame);
-  appShellEl.classList.toggle("mobile-game-fit", shouldFitMobilePortraitGame);
   gameScreenEl.classList.toggle("desktop-game-fit", shouldFitDesktopGame);
-  gameScreenEl.classList.toggle("mobile-game-fit", shouldFitMobilePortraitGame);
 
-  if (!shouldFitDesktopGame && !shouldFitMobilePortraitGame) {
+  if (!shouldFitDesktopGame) {
     gameScreenEl.style.removeProperty("zoom");
     gameScreenEl.style.removeProperty("max-width");
     gameScreenEl.style.removeProperty("margin-inline");
-    gameScreenEl.style.removeProperty("transform");
-    gameScreenEl.style.removeProperty("transform-origin");
     return;
   }
+
+  gameScreenEl.style.setProperty("max-width", `${DESKTOP_GAME_WIDTH}px`);
+  gameScreenEl.style.setProperty("margin-inline", "auto");
+  gameScreenEl.style.setProperty("zoom", "1");
 
   const shellStyles = window.getComputedStyle(appShellEl);
   const shellPaddingTop = Number.parseFloat(shellStyles.paddingTop) || 0;
@@ -298,21 +294,7 @@ function updateDesktopGameFit() {
   );
   const naturalHeight = Math.max(1, gameScreenEl.scrollHeight);
   const fitScale = Math.min(1, availableHeight / naturalHeight);
-
-  if (shouldFitDesktopGame) {
-    gameScreenEl.style.setProperty("max-width", `${DESKTOP_GAME_WIDTH}px`);
-    gameScreenEl.style.setProperty("margin-inline", "auto");
-    gameScreenEl.style.setProperty("transform", "none");
-    gameScreenEl.style.setProperty("transform-origin", "top center");
-    gameScreenEl.style.setProperty("zoom", fitScale.toFixed(3));
-    return;
-  }
-
-  gameScreenEl.style.removeProperty("zoom");
-  gameScreenEl.style.setProperty("max-width", `${DESKTOP_GAME_WIDTH}px`);
-  gameScreenEl.style.setProperty("margin-inline", "auto");
-  gameScreenEl.style.setProperty("transform-origin", "top center");
-  gameScreenEl.style.setProperty("transform", `scale(${fitScale.toFixed(3)})`);
+  gameScreenEl.style.setProperty("zoom", fitScale.toFixed(3));
 }
 
 function resizeBattlefieldFrame() {
@@ -1055,6 +1037,14 @@ function createCards() {
         activeDragPayload = "";
       });
     }
+    if (prefersTouchInput) {
+      card.addEventListener("pointerdown", (event) => {
+        if (event.pointerType !== "touch" || state.phase === "shop" || !isPlayerInputAllowed()) {
+          return;
+        }
+        startTouchDrag(event, `tower:${tower.id}`, "tower");
+      });
+    }
     card.addEventListener("click", () => {
       if (state.phase === "shop") {
         state.shopSelectionType = "tower";
@@ -1104,6 +1094,14 @@ function createCards() {
         activeDragPayload = "";
       });
     }
+    if (prefersTouchInput) {
+      card.addEventListener("pointerdown", (event) => {
+        if (event.pointerType !== "touch" || state.phase === "shop" || !isPlayerInputAllowed()) {
+          return;
+        }
+        startTouchDrag(event, `attacker:${attacker.id}`, "attacker");
+      });
+    }
     card.addEventListener("click", () => {
       if (state.phase === "shop") {
         state.shopSelectionType = "attacker";
@@ -1118,6 +1116,122 @@ function createCards() {
     });
     attackerPanelEl.appendChild(card);
   }
+}
+
+function startTouchDrag(event, payload, kind) {
+  if (touchDragState || !isPlayerInputAllowed()) {
+    return;
+  }
+
+  const sourceCard = event.currentTarget;
+  const sourceRect = sourceCard.getBoundingClientRect();
+  const ghostEl = sourceCard.cloneNode(true);
+  ghostEl.style.position = "fixed";
+  ghostEl.style.left = `${sourceRect.left}px`;
+  ghostEl.style.top = `${sourceRect.top}px`;
+  ghostEl.style.width = `${sourceRect.width}px`;
+  ghostEl.style.height = `${sourceRect.height}px`;
+  ghostEl.style.opacity = "0.8";
+  ghostEl.style.pointerEvents = "none";
+  ghostEl.style.zIndex = "9999";
+  ghostEl.style.transform = "scale(0.96)";
+  ghostEl.style.boxShadow = "0 10px 20px rgba(2, 6, 23, 0.4)";
+  document.body.appendChild(ghostEl);
+
+  touchDragState = {
+    pointerId: event.pointerId,
+    payload,
+    kind,
+    ghostEl
+  };
+  activeDragPayload = payload;
+
+  updateTouchDragGhost(event.clientX, event.clientY);
+  document.addEventListener("pointermove", onTouchDragMove, { passive: false });
+  document.addEventListener("pointerup", onTouchDragEnd, { passive: false });
+  document.addEventListener("pointercancel", onTouchDragCancel, { passive: false });
+}
+
+function updateTouchDragGhost(clientX, clientY) {
+  if (!touchDragState?.ghostEl) {
+    return;
+  }
+  const ghostRect = touchDragState.ghostEl.getBoundingClientRect();
+  touchDragState.ghostEl.style.left = `${Math.round(clientX - ghostRect.width / 2)}px`;
+  touchDragState.ghostEl.style.top = `${Math.round(clientY - ghostRect.height / 2)}px`;
+}
+
+function clearTouchDragHighlights() {
+  playerSlotsEl.querySelectorAll(".tower-slot.over").forEach((slot) => slot.classList.remove("over"));
+}
+
+function onTouchDragMove(event) {
+  if (!touchDragState || event.pointerId !== touchDragState.pointerId) {
+    return;
+  }
+  event.preventDefault();
+  updateTouchDragGhost(event.clientX, event.clientY);
+
+  if (touchDragState.kind !== "tower") {
+    return;
+  }
+  clearTouchDragHighlights();
+  const slotEl = document.elementFromPoint(event.clientX, event.clientY)?.closest(".tower-slot.player");
+  if (slotEl && isPlayerInputAllowed()) {
+    slotEl.classList.add("over");
+  }
+}
+
+function endTouchDragInternal(clientX, clientY, shouldApplyDrop) {
+  if (!touchDragState) {
+    return;
+  }
+
+  if (touchDragState.ghostEl?.parentNode) {
+    touchDragState.ghostEl.parentNode.removeChild(touchDragState.ghostEl);
+  }
+  clearTouchDragHighlights();
+
+  if (shouldApplyDrop && isPlayerInputAllowed()) {
+    if (touchDragState.kind === "tower" && touchDragState.payload.startsWith("tower:")) {
+      const slotEl = document.elementFromPoint(clientX, clientY)?.closest(".tower-slot.player");
+      if (slotEl) {
+        const slotIndex = Number(slotEl.dataset.slotIndex);
+        const towerId = touchDragState.payload.split(":")[1];
+        if (Number.isInteger(slotIndex)) {
+          placePlayerTower(slotIndex, towerId);
+        }
+      }
+    } else if (touchDragState.kind === "attacker" && touchDragState.payload.startsWith("attacker:")) {
+      const dropInsideArena = !!document.elementFromPoint(clientX, clientY)?.closest("#arena-drop-zone");
+      if (dropInsideArena) {
+        const attackerId = touchDragState.payload.split(":")[1];
+        queuePlayerAttacker(attackerId);
+      }
+    }
+  }
+
+  touchDragState = null;
+  activeDragPayload = "";
+  document.removeEventListener("pointermove", onTouchDragMove);
+  document.removeEventListener("pointerup", onTouchDragEnd);
+  document.removeEventListener("pointercancel", onTouchDragCancel);
+}
+
+function onTouchDragEnd(event) {
+  if (!touchDragState || event.pointerId !== touchDragState.pointerId) {
+    return;
+  }
+  event.preventDefault();
+  endTouchDragInternal(event.clientX, event.clientY, true);
+}
+
+function onTouchDragCancel(event) {
+  if (!touchDragState || event.pointerId !== touchDragState.pointerId) {
+    return;
+  }
+  event.preventDefault();
+  endTouchDragInternal(event.clientX, event.clientY, false);
 }
 
 function isPlayerInputAllowed() {

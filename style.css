@@ -73,11 +73,6 @@ select {
   justify-items: center;
 }
 
-.app-shell.mobile-game-fit {
-  display: grid;
-  justify-items: center;
-}
-
 #game-screen {
   touch-action: none;
   -webkit-user-select: none;
@@ -359,11 +354,6 @@ select {
 }
 
 .game-screen.desktop-game-fit {
-  width: 100%;
-  min-height: 0;
-}
-
-.game-screen.mobile-game-fit {
   width: 100%;
   min-height: 0;
 }
@@ -1024,7 +1014,7 @@ button:disabled {
   }
 
   .dock-header p {
-    display: none;
+    display: inline;
   }
 
   .tower-panel,
@@ -1055,17 +1045,18 @@ button:disabled {
     min-height: calc(var(--app-height) - 1.5rem - var(--safe-top) - var(--safe-bottom));
   }
 
-  .section-topline,
-  .top-bar,
-  .action-row {
+  .section-topline {
     flex-direction: column;
     align-items: stretch;
   }
 
-  .hud-strip,
   .overview-grid,
   .shop-actions {
     grid-template-columns: 1fr;
+  }
+
+  .hud-strip {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
   .arena-wrap {
