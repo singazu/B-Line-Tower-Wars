@@ -641,6 +641,7 @@ window.MP = (function () {
     try {
       await roundRef.set({
         towers: encodedTowers,
+        towerLevels: data.towerLevels,
         queue: data.queue,
         fanSeeds: data.fanSeeds,
         towerUpgrades: data.towerUpgrades,
@@ -723,6 +724,14 @@ window.MP = (function () {
       towers[i] = val === "empty" || val === undefined ? null : val;
     }
     data.towers = towers;
+
+    const rawTowerLevels = Array.isArray(data.towerLevels) ? data.towerLevels : [];
+    const towerLevels = new Array(5).fill(null);
+    for (let i = 0; i < 5; i++) {
+      const level = rawTowerLevels[i];
+      towerLevels[i] = Number.isFinite(level) ? Math.max(1, Math.floor(level)) : null;
+    }
+    data.towerLevels = towerLevels;
 
     // Firebase drops empty arrays — guarantee queue/fanSeeds are arrays.
     if (!Array.isArray(data.queue)) data.queue = [];
@@ -818,6 +827,24 @@ window.MP = (function () {
     }
     if (!Array.isArray(data.towers) || data.towers.length !== 5) {
       return false;
+    }
+    if (data.towerLevels !== undefined) {
+      if (!Array.isArray(data.towerLevels) || data.towerLevels.length !== 5) {
+        return false;
+      }
+      for (let i = 0; i < data.towerLevels.length; i += 1) {
+        const towerId = data.towers[i];
+        const level = data.towerLevels[i];
+        if (towerId === null) {
+          if (!(level === null || level === undefined)) {
+            return false;
+          }
+          continue;
+        }
+        if (!Number.isFinite(level) || level < 1) {
+          return false;
+        }
+      }
     }
     if (!Array.isArray(data.queue)) {
       return false;

@@ -207,12 +207,14 @@
 
     // Snapshot current prep decisions
     const towers    = state.playerTowers.map((t) => (t ? t.id : null));
+    const towerLevels = state.playerTowers.map((t) => (t ? Math.max(1, Number(t.level) || 1) : null));
     const queue     = [...state.playerQueue];
     const fanSeeds  = queue.map(() => Math.random() * 2 - 1); // precompute deterministic seeds
 
     const prepData = {
       waveNumber:       state.waveNumber,
       towers,
+      towerLevels,
       queue,
       fanSeeds,
       towerUpgrades:    { ...state.playerTowerUpgrades },
@@ -279,16 +281,17 @@
 
       // Reconstruct opponent towers with the same runtime fields used in
       // normal gameplay (cone math, targeting, cooldown defaults, etc.).
-      state.aiTowers = data.towers.map((towerId) => {
+      state.aiTowers = data.towers.map((towerId, slotIndex) => {
         if (!towerId) return null;
         const def = towerDefs.find((t) => t.id === towerId);
         if (!def) return null;
         const lvl = opponentTowerUpgrades[towerId] || 0;
         const mult = Math.pow(TOWER_UPGRADE_MULTIPLIER, lvl);
-        const tower = createTowerInstance(def, "ai");
-        tower.damage = def.damage * mult;
-        tower.range = def.range * mult;
-        tower.fireRate = def.fireRate / mult;
+        const syncedLevel = Math.max(1, Number(data.towerLevels?.[slotIndex]) || 1);
+        const tower = createTowerInstance(def, "ai", syncedLevel);
+        tower.damage *= mult;
+        tower.range *= mult;
+        tower.fireRate /= mult;
         tower.cooldown = 0;
         return tower;
       });

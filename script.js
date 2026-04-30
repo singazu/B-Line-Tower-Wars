@@ -42,6 +42,32 @@ const TOWER_LEVEL_RULES = {
     fireRatePerLevel: 1.25,
     iconScalePerLevel: 1.2,
     slowDurationPerLevel: 1.5
+  },
+  red: {
+    maxLevel: 2,
+    damagePerLevel: 1.5,
+    rangePerLevel: 1.1,
+    fireRatePerLevel: 1,
+    iconScalePerLevel: 1.2,
+    shrapnelDamagePerLevel: 1.5
+  },
+  green: {
+    maxLevel: 2,
+    damagePerLevel: 1.5,
+    rangePerLevel: 1.1,
+    fireRatePerLevel: 1.2,
+    iconScalePerLevel: 1.2,
+    poisonDotPerLevel: 1.5
+  },
+  orange: {
+    maxLevel: 2,
+    damagePerLevel: 1.2,
+    rangePerLevel: 1.1,
+    fireRatePerLevel: 1,
+    iconScalePerLevel: 1.2,
+    maxTargetsByLevel: {
+      2: 3
+    }
   }
 };
 const towerSpritePaths = {
@@ -910,15 +936,29 @@ function createTowerInstance(def, owner = "player", level = 1) {
   const levelFireRateMultiplier = Math.pow(levelRule.fireRatePerLevel, levelSteps);
   const iconScale = Math.pow(levelRule.iconScalePerLevel, levelSteps);
   const slowDurationPerLevel = levelRule.slowDurationPerLevel || 1;
+  const shrapnelDamagePerLevel = levelRule.shrapnelDamagePerLevel || 1;
+  const poisonDotPerLevel = levelRule.poisonDotPerLevel || 1;
   const slowDuration = def.id === "yellow"
     ? 1.2 * Math.pow(slowDurationPerLevel, levelSteps)
     : 0;
+  const shrapnelDamageMultiplier = def.id === "red"
+    ? Math.pow(shrapnelDamagePerLevel, levelSteps)
+    : 1;
+  const poisonDotMultiplier = def.id === "green"
+    ? Math.pow(poisonDotPerLevel, levelSteps)
+    : 1;
+  const maxTargetsByLevel = levelRule.maxTargetsByLevel || null;
+  const scaledMaxTargets = maxTargetsByLevel && Number.isFinite(maxTargetsByLevel[safeLevel])
+    ? maxTargetsByLevel[safeLevel]
+    : Math.max(1, def.maxTargets || 1);
   const coneDegrees = Number.isFinite(def.coneDegrees) ? def.coneDegrees : BASE_TOWER_CONE_DEGREES;
   return {
     ...def,
     level: safeLevel,
     iconScale,
     slowDuration,
+    shrapnelDamageMultiplier,
+    poisonDotMultiplier,
     damage: def.damage * upgradeMultiplier * levelDamageMultiplier,
     range: def.range * upgradeMultiplier * levelRangeMultiplier,
     fireRate: def.fireRate / (upgradeMultiplier * levelFireRateMultiplier),
@@ -926,7 +966,7 @@ function createTowerInstance(def, owner = "player", level = 1) {
     coneDegrees,
     coneHalfAngleRad: (coneDegrees * Math.PI) / 360,
     coneHalfAngleCos: Math.cos((coneDegrees * Math.PI) / 360),
-    maxTargets: Math.max(1, def.maxTargets || 1)
+    maxTargets: Math.max(1, scaledMaxTargets)
   };
 }
 
@@ -1888,11 +1928,16 @@ function pickBestAITowerPlacement(mana, defenseBudget, playerDefenseScore, waveN
       if (forceTowerDiversity && !missingTowerTypes.includes(candidate.id)) {
         continue;
       }
-      if (existing && existing.id === candidate.id) {
+      const canUpgrade = !!existing
+        && existing.id === candidate.id
+        && existing.level < getTowerMaxLevel(candidate.id);
+      const nextLevel = canUpgrade ? existing.level + 1 : 1;
+      if (existing && existing.id === candidate.id && !canUpgrade) {
         continue;
       }
 
-      const candidatePower = towerPowerScore(candidate);
+      const candidateTower = createTowerInstance(candidate, "ai", nextLevel);
+      const candidatePower = towerPowerScore(candidateTower);
       const improvement = existing ? candidatePower - existingPower : candidatePower + 0.9;
       if (existing && improvement < 0.1) {
         continue;
@@ -1903,10 +1948,11 @@ function pickBestAITowerPlacement(mana, defenseBudget, playerDefenseScore, waveN
       const counterBoost = playerDefenseScore > 9 ? candidate.range * 2.1 : candidate.damage * 0.2;
       const emptyBonus = existing ? 0 : 0.8;
       const diversityPriority = forceTowerDiversity ? 1.35 : 0;
-      const value = improvement + counterBoost + emptyBonus + diversityPriority - diversityPenalty - candidate.cost * 0.09 - expensiveEarlyPenalty + Math.random() * 0.08;
+      const upgradeBias = canUpgrade ? 0.65 : 0;
+      const value = improvement + counterBoost + emptyBonus + diversityPriority + upgradeBias - diversityPenalty - candidate.cost * 0.09 - expensiveEarlyPenalty + Math.random() * 0.08;
 
       if (!best || value > best.value) {
-        best = { slotIndex, tower: candidate, value };
+        best = { slotIndex, tower: candidate, value, nextLevel };
       }
     }
   }
@@ -2005,7 +2051,7 @@ function prepareAIMoves() {
     }
     state.aiMana -= bestPlacement.tower.cost;
     defenseBudget -= bestPlacement.tower.cost;
-    state.aiTowers[bestPlacement.slotIndex] = createTowerInstance(bestPlacement.tower, "ai");
+    state.aiTowers[bestPlacement.slotIndex] = createTowerInstance(bestPlacement.tower, "ai", bestPlacement.nextLevel || 1);
     markMatchUsage("towers", bestPlacement.tower.id, "ai");
     placementCount += 1;
   }
@@ -2148,7 +2194,7 @@ function targetsForTower(tower, towerPos, incomingAttackers) {
   return selected;
 }
 
-function spawnProjectile(fromPos, target, damage, color, towerId, owner, speedOverride = null, slowDurationOverride = null) {
+function spawnProjectile(fromPos, target, damage, color, towerId, owner, speedOverride = null, slowDurationOverride = null, poisonDotMultiplierOverride = null, shrapnelDamageMultiplierOverride = null) {
   const projectileId = state.nextProjectileId;
   state.nextProjectileId += 1;
   state.projectiles.push({
@@ -2162,6 +2208,8 @@ function spawnProjectile(fromPos, target, damage, color, towerId, owner, speedOv
     damage,
     speed: speedOverride || 1.35,
     slowDuration: Number.isFinite(slowDurationOverride) ? slowDurationOverride : null,
+    poisonDotMultiplier: Number.isFinite(poisonDotMultiplierOverride) ? poisonDotMultiplierOverride : 1,
+    shrapnelDamageMultiplier: Number.isFinite(shrapnelDamageMultiplierOverride) ? shrapnelDamageMultiplierOverride : 1,
     color,
     towerId,
     owner,
@@ -2170,7 +2218,7 @@ function spawnProjectile(fromPos, target, damage, color, towerId, owner, speedOv
   });
 }
 
-function applyProjectileDamage(target, damage, towerId, owner, allowAoe = true, slowDurationForHit = null) {
+function applyProjectileDamage(target, damage, towerId, owner, allowAoe = true, slowDurationForHit = null, poisonDotMultiplierForHit = 1, shrapnelDamageMultiplierForHit = 1) {
   if (!target || target.isDefeated || damage <= 0) {
     return;
   }
@@ -2184,11 +2232,13 @@ function applyProjectileDamage(target, damage, towerId, owner, allowAoe = true, 
     target.poisonTicksRemaining = 3;
     target.poisonTickInterval = 1;
     target.poisonTickTimer = 1;
-    target.poisonBaseDamage = damage;
+    const appliedPoisonDotMultiplier = Number.isFinite(poisonDotMultiplierForHit) ? poisonDotMultiplierForHit : 1;
+    target.poisonBaseDamage = damage * appliedPoisonDotMultiplier;
     target.poisonSourceOwner = owner;
   }
   if (towerId === "red" && allowAoe) {
-    spawnRedAoeBursts(target, damage * 0.33, target.id);
+    const appliedShrapnelMultiplier = Number.isFinite(shrapnelDamageMultiplierForHit) ? shrapnelDamageMultiplierForHit : 1;
+    spawnRedAoeBursts(target, damage * 0.33 * appliedShrapnelMultiplier, target.id);
   }
   if (target.hp <= 0 && !target.isDefeated) {
     target.isDefeated = true;
@@ -2591,7 +2641,18 @@ function updateTowerFire(dt) {
       continue;
     }
     for (const target of targets) {
-      spawnProjectile(towerPosPlayer[i], target, tower.damage, tower.color, tower.id, "player", null, tower.slowDuration);
+      spawnProjectile(
+        towerPosPlayer[i],
+        target,
+        tower.damage,
+        tower.color,
+        tower.id,
+        "player",
+        null,
+        tower.slowDuration,
+        tower.poisonDotMultiplier,
+        tower.shrapnelDamageMultiplier
+      );
     }
     spawnTowerFlash(towerPosPlayer[i], tower.color);
     if ((tower.id === "violet" || tower.id === "yellow" || tower.id === "red" || tower.id === "green" || tower.id === "orange") && state.soundCooldowns[tower.id] <= 0) {
@@ -2615,7 +2676,18 @@ function updateTowerFire(dt) {
       continue;
     }
     for (const target of targets) {
-      spawnProjectile(towerPosAI[i], target, tower.damage, tower.color, tower.id, "ai", null, tower.slowDuration);
+      spawnProjectile(
+        towerPosAI[i],
+        target,
+        tower.damage,
+        tower.color,
+        tower.id,
+        "ai",
+        null,
+        tower.slowDuration,
+        tower.poisonDotMultiplier,
+        tower.shrapnelDamageMultiplier
+      );
     }
     spawnTowerFlash(towerPosAI[i], tower.color);
     if ((tower.id === "violet" || tower.id === "yellow" || tower.id === "red" || tower.id === "green" || tower.id === "orange") && state.soundCooldowns[tower.id] <= 0) {
@@ -2650,7 +2722,16 @@ function updateProjectiles(dt) {
     projectile.prevY = projectile.y;
 
     if (dist <= 0.012) {
-      applyProjectileDamage(target, projectile.damage, projectile.towerId, projectile.owner, true, projectile.slowDuration);
+      applyProjectileDamage(
+        target,
+        projectile.damage,
+        projectile.towerId,
+        projectile.owner,
+        true,
+        projectile.slowDuration,
+        projectile.poisonDotMultiplier,
+        projectile.shrapnelDamageMultiplier
+      );
       if (projectile.towerId === "orange") {
         spawnProjectileImpactParticles(projectile.x, projectile.y, "#fdba74", 8);
       }
