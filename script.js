@@ -35,13 +35,6 @@ const towerSpritePaths = {
   orange: "assets/towers/orange.png"
 };
 
-const towerSprites = {};
-for (const tower of towerDefs) {
-  const img = new Image();
-  img.src = towerSpritePaths[tower.id];
-  towerSprites[tower.id] = img;
-}
-
 const attackerDefs = [
   { id: "imp", name: "Imp", cost: 2, hp: 20, speed: 0.1, color: "#1f2937" },
   { id: "runner", name: "Runner", cost: 3, hp: 18, speed: 0.14, color: "#d97706" },
@@ -811,7 +804,14 @@ function grantRoundManaBonus(owner, amount = 1) {
   if (!Number.isFinite(amount) || amount <= 0) {
     return;
   }
-  state.roundManaBonusPending[owner] = (state.roundManaBonusPending[owner] || 0) + amount;
+  if (owner === "player") {
+    state.playerMana = clamp(state.playerMana + amount, 0, MANA_CAP);
+  } else {
+    state.aiMana = clamp(state.aiMana + amount, 0, MANA_CAP);
+  }
+
+  // Keep legacy field neutral for save compatibility with old sessions.
+  state.roundManaBonusPending[owner] = 0;
 }
 
 function markMatchUsage(kind, id, owner) {
@@ -1623,10 +1623,8 @@ function beginRoundBanner() {
 function openRoundShop() {
   console.warn(`[Game] advanceToNextRound called. waveNumber before increment=${state.waveNumber}`);
   const gain = 9 + state.waveNumber;
-  const playerBonus = state.roundManaBonusPending.player || 0;
-  const aiBonus = state.roundManaBonusPending.ai || 0;
-  state.playerMana = clamp(state.playerMana + gain + playerBonus, 0, MANA_CAP);
-  state.aiMana = clamp(state.aiMana + gain + AI_MANA_BONUS_PER_ROUND + aiBonus, 0, MANA_CAP);
+  state.playerMana = clamp(state.playerMana + gain, 0, MANA_CAP);
+  state.aiMana = clamp(state.aiMana + gain + AI_MANA_BONUS_PER_ROUND, 0, MANA_CAP);
   state.roundManaBonusPending.player = 0;
   state.roundManaBonusPending.ai = 0;
   state.waveNumber += 1;
