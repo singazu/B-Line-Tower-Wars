@@ -275,12 +275,9 @@ window.MP = (function () {
         _finish(attempt.joinResult);
       }
 
-      if (attempt.sawOlderRoom && myWaitingRoomId) {
-        await _enterJoiningMode("older-waiting-room-detected", {
-          candidateRoomId: attempt.candidateRoomId,
-          failureReason: attempt.failureReason
-        });
-      }
+      // Do not tear down our hosted room just because a join attempt on another
+      // candidate did not commit. Keeping one stable waiting room prevents
+      // host/join thrashing where both peers repeatedly abandon and recreate.
 
       return attempt;
     }
