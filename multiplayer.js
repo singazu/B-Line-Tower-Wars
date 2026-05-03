@@ -230,6 +230,7 @@ window.MP = (function () {
 
       const roomId = await _createWaitingRoom();
       myWaitingRoomId = roomId;
+      await db.ref(`rooms/${roomId}`).onDisconnect().remove();
 
       console.info("[MP] Switching to hosting mode.", {
         roomId,
@@ -241,19 +242,6 @@ window.MP = (function () {
       const roomRef = db.ref(`rooms/${roomId}`);
       hostRoomListener = roomRef.on("value", (snap) => {
         const room = snap.val();
-        if (!room && !matched) {
-          console.warn("[MP] Waiting room disappeared while hosting; recreating.", {
-            roomId,
-            uid: myUid,
-            tabId: myTabId
-          });
-          myWaitingRoomId = null;
-          _detachHostRoomListener(roomId);
-          _enterHostingMode("waiting-room-missing").catch((err) => {
-            console.warn("[MP] Failed to recreate waiting room.", { message: err.message });
-          });
-          return;
-        }
         if (!room || matched) {
           return;
         }
@@ -288,9 +276,12 @@ window.MP = (function () {
         _finish(attempt.joinResult);
       }
 
-      // Do not tear down our hosted room just because a join attempt on another
-      // candidate did not commit. Keeping one stable waiting room prevents
-      // host/join thrashing where both peers repeatedly abandon and recreate.
+      if (attempt.sawOlderRoom && myWaitingRoomId) {
+        await _enterJoiningMode("older-waiting-room-detected", {
+          candidateRoomId: attempt.candidateRoomId,
+          failureReason: attempt.failureReason
+        });
+      }
 
       return attempt;
     }
@@ -362,6 +353,7 @@ window.MP = (function () {
     const snap = await db.ref("rooms")
       .orderByChild("status")
       .equalTo("waiting")
+      .limitToFirst(20)
       .once("value");
 
     const rooms = snap.val() || {};
@@ -394,18 +386,24 @@ window.MP = (function () {
           return false;
         }
 
-        const createdAt = Number.isFinite(room.createdAt) ? room.createdAt : null;
-        const stale = createdAt !== null && createdAt < now - STALE_QUEUE_MS;
+        const stale = !room.createdAt || room.createdAt < now - STALE_QUEUE_MS;
         if (stale) {
-          console.warn("[MP] Removing stale waiting room during scan.", {
+          console.debug("[MP] Skipping candidate room: stale.", {
             roomId,
-            createdAt
+            createdAt: room.createdAt || null
           });
-          db.ref(`rooms/${roomId}`).remove().catch((err) => {
-            console.warn("[MP] Failed to remove stale waiting room.", {
-              roomId,
-              message: err.message
-            });
+          return false;
+        }
+
+        const shouldYieldToCandidate = skipRoomId && ownWaitingRoom
+          ? _isRoomOlder(roomId, room, skipRoomId, ownWaitingRoom)
+          : false;
+        if (skipRoomId && ownWaitingRoom && !shouldYieldToCandidate) {
+          console.info("[MP] Staying host; candidate room is newer.", {
+            roomId,
+            ownRoomId: skipRoomId,
+            candidateCreatedAt: room.createdAt || null,
+            ownCreatedAt: ownWaitingRoom.createdAt || null
           });
           return false;
         }
@@ -420,6 +418,10 @@ window.MP = (function () {
             tabId: myTabId
           });
           return false;
+        }
+
+        if (shouldYieldToCandidate) {
+          result.sawOlderRoom = true;
         }
 
         return true;
@@ -469,30 +471,29 @@ window.MP = (function () {
         continue;
       }
 
-      let claimResult = null;
       try {
-        claimResult = await roomRef.transaction((currentRoom) => {
-          if (!currentRoom || currentRoom.status !== "waiting" || currentRoom.guest) {
-            return;
-          }
-          return {
-            ...currentRoom,
-            status: "active",
-            guest: myUid,
-            guestName: _displayName,
-            guestTabId: myTabId,
-            guestJoinedAt: firebase.database.ServerValue.TIMESTAMP
-          };
+        await roomRef.update({
+          status: "active",
+          guest: myUid,
+          guestName: _displayName,
+          guestTabId: myTabId
         });
       } catch (err) {
-        console.warn(`[MP] Transaction failed on room ${roomId}: ${err.message}`);
-        result.failureReason = result.failureReason || "transaction-failed";
+        console.warn(`[MP] Update failed on room ${roomId}: ${err.message}`);
+        result.failureReason = result.failureReason || "update-failed";
         continue;
       }
 
-      const verifyRoom = claimResult?.snapshot?.val() || null;
+      // Verify we won any race — re-read and confirm we're the guest.
+      let verifyRoom = null;
+      try {
+        const verifySnap = await roomRef.once("value");
+        verifyRoom = verifySnap.val();
+      } catch (err) {
+        console.warn(`[MP] Verify read failed for room ${roomId}: ${err.message}`);
+      }
 
-      if (claimResult?.committed && verifyRoom && verifyRoom.guest === myUid && verifyRoom.status === "active") {
+      if (verifyRoom && verifyRoom.guest === myUid && verifyRoom.status === "active") {
         console.log("[MP] Joined room as guest.", {
           roomId,
           uid: myUid,
@@ -506,13 +507,11 @@ window.MP = (function () {
         return result;
       }
 
-      const failureReason = !claimResult?.committed
-        ? "transaction-not-committed"
-        : !verifyRoom
-          ? "room-missing-after-claim"
-          : verifyRoom.guest !== myUid
-            ? "lost-race"
-            : `status-${verifyRoom.status || "unknown"}`;
+      const failureReason = !verifyRoom
+        ? "room-missing-after-claim"
+        : verifyRoom.guest !== myUid
+          ? "lost-race"
+          : `status-${verifyRoom.status || "unknown"}`;
       console.warn(`[MP] Claim did not stick on room ${roomId}. reason=${failureReason} status=${verifyRoom?.status || "null"} guest=${verifyRoom?.guest || "null"}`);
       result.failureReason = result.failureReason || failureReason;
     }
@@ -527,8 +526,7 @@ window.MP = (function () {
 
   async function _createWaitingRoom() {
     const roomId = _generateId("room");
-    const roomRef = db.ref(`rooms/${roomId}`);
-    await roomRef.set({
+    await db.ref(`rooms/${roomId}`).set({
       createdAt: firebase.database.ServerValue.TIMESTAMP,
       status: "waiting",
       host: myUid,
@@ -656,41 +654,31 @@ window.MP = (function () {
     }
 
     try {
-      await db.ref(`rooms/${_roomId}/rounds/${data.waveNumber}/${_myRole}Ready`).set(true);
-      console.warn(`[MP] submitPrepData ready flag set. room=${_roomId} role=${_myRole} wave=${data.waveNumber}`);
+      await db.ref(`rooms/${_roomId}/${_myRole}Ready`).set(true);
+      console.warn(`[MP] submitPrepData ready flag set. room=${_roomId} role=${_myRole}`);
     } catch (err) {
       console.error(`[MP] submitPrepData ready write failed. room=${_roomId} role=${_myRole}: ${err.message}`);
       throw err;
     }
   }
 
-  function listenForBothReady(waveNumber, callback) {
-    if (typeof waveNumber === "function") {
-      callback = waveNumber;
-      waveNumber = null;
-    }
+  function listenForBothReady(callback) {
     if (!_roomId) {
       return () => {};
     }
 
-    if (!Number.isFinite(waveNumber)) {
-      console.error(`[MP] listenForBothReady missing wave number. room=${_roomId} role=${_myRole}`);
-      callback && callback("timeout");
-      return () => {};
-    }
+    console.warn(`[MP] listenForBothReady start. room=${_roomId} role=${_myRole}`);
 
-    console.warn(`[MP] listenForBothReady start. room=${_roomId} role=${_myRole} wave=${waveNumber}`);
-
-    const ref = db.ref(`rooms/${_roomId}/rounds/${waveNumber}`);
+    const ref = db.ref(`rooms/${_roomId}`);
     let fired = false;
 
     const handler = ref.on("value", (snap) => {
-      const round = snap.val();
-      if (!round || fired) {
+      const room = snap.val();
+      if (!room || fired) {
         return;
       }
-      console.warn(`[MP] listenForBothReady snap. wave=${waveNumber} hostReady=${!!round.hostReady} guestReady=${!!round.guestReady}`);
-      if (round.hostReady && round.guestReady) {
+      console.warn(`[MP] listenForBothReady snap. hostReady=${!!room.hostReady} guestReady=${!!room.guestReady} status=${room.status}`);
+      if (room.hostReady && room.guestReady) {
         fired = true;
         ref.off("value", handler);
         if (_bothReadyOff === handler) {
@@ -707,7 +695,7 @@ window.MP = (function () {
       }
       fired = true;
       ref.off("value", handler);
-      console.error(`[MP] listenForBothReady TIMEOUT after ${READY_TIMEOUT_MS}ms. room=${_roomId} role=${_myRole} wave=${waveNumber}`);
+      console.error(`[MP] listenForBothReady TIMEOUT after ${READY_TIMEOUT_MS}ms. room=${_roomId} role=${_myRole}`);
       callback("timeout");
     }, READY_TIMEOUT_MS);
 
@@ -758,6 +746,10 @@ window.MP = (function () {
     }
 
     await db.ref(`rooms/${_roomId}/rounds/${waveNumber}/${_myRole}Score`).set(myScore);
+    if (_myRole === "host") {
+      await db.ref(`rooms/${_roomId}/hostReady`).set(false);
+      await db.ref(`rooms/${_roomId}/guestReady`).set(false);
+    }
 
     // Wait up to 10s for the opponent's authoritative round score so both
     // clients reconcile their local sim divergences against a single source.

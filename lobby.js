@@ -243,7 +243,7 @@
     MP.submitPrepData(prepData).then(() => {
       console.warn(`[Lobby] submitPrepData resolved. role=${multiplayerRole}`);
       // Listen for both players to be ready
-      _cancelBothReady = MP.listenForBothReady(state.waveNumber, (reason) => {
+      _cancelBothReady = MP.listenForBothReady((reason) => {
         _cancelBothReady = null;
         _isWaitingForOpponent = false;
         _setConnectionDot("connected");
@@ -319,20 +319,14 @@
   // Battle completion (called from script.js onBattleFinished hook)
   // ---------------------------------------------------------------------------
   async function onMultiplayerBattleFinished() {
-    const finishedWave = state.waveNumber;
     const roundScore = state.playerScore - _scoreAtBattleStart;
-    console.warn(`[Lobby] onMultiplayerBattleFinished. wave=${finishedWave} role=${multiplayerRole} score=${roundScore} playerScore=${state.playerScore} aiScore=${state.aiScore}`);
+    console.warn(`[Lobby] onMultiplayerBattleFinished. wave=${state.waveNumber} role=${multiplayerRole} score=${roundScore} playerScore=${state.playerScore} aiScore=${state.aiScore}`);
 
     // Report my score, then receive the opponent's authoritative score.
-    const result = await MP.completeBattle(finishedWave, roundScore).catch((err) => {
+    const result = await MP.completeBattle(state.waveNumber, roundScore).catch((err) => {
       console.warn("[Lobby] completeBattle error:", err);
       return { opponentScore: state.aiScore - _aiScoreAtBattleStart };
     });
-
-    if (multiplayerRole === null || state.gameOver || state.waveNumber !== finishedWave) {
-      console.warn(`[Lobby] Ignoring stale battle completion. finishedWave=${finishedWave} currentWave=${state.waveNumber} role=${multiplayerRole}`);
-      return;
-    }
 
     // Reconcile opponent side using their own sim's round score (source of truth
     // for what their attackers did), in case our local sim diverged.
@@ -341,11 +335,11 @@
     console.warn(`[Lobby] Reconciled scores. playerScore=${state.playerScore} aiScore=${state.aiScore}`);
 
     // Advance match the same way single-player does
-    if (finishedWave >= MAX_ROUNDS) {
-      console.warn(`[Lobby] finishMatch branch. wave=${finishedWave} >= MAX_ROUNDS`);
+    if (state.waveNumber >= MAX_ROUNDS) {
+      console.warn(`[Lobby] finishMatch branch. wave=${state.waveNumber} >= MAX_ROUNDS`);
       finishMatch();
     } else {
-      console.warn(`[Lobby] advance-to-next-round branch. wave=${finishedWave}`);
+      console.warn(`[Lobby] advance-to-next-round branch. wave=${state.waveNumber}`);
       openRoundShop();
     }
   }
