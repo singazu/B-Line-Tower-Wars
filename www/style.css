@@ -776,9 +776,12 @@ select {
 }
 
 .dock {
-  border: 1px solid var(--panel-border);
+  border: 1px solid rgba(17, 24, 39, 0.35);
   border-radius: 1.2rem;
-  background: var(--panel);
+  background-color: #efe5cf;
+  background-image: url("assets/arena/battlefield_background.png");
+  background-size: cover;
+  background-position: center;
   padding: 0.85rem;
   box-shadow: var(--shadow);
 }
@@ -791,6 +794,30 @@ select {
   margin-bottom: 0.55rem;
 }
 
+.dock-label-image {
+  display: block;
+  height: 1.15rem;
+  width: auto;
+  image-rendering: auto;
+}
+
+.dock-label-towers {
+  max-width: 7rem;
+}
+
+.dock-label-attackers {
+  max-width: 8.3rem;
+}
+
+.dock-subtitle {
+  margin: 0.28rem 0 0;
+  font-size: 0.9rem;
+  color: #111827;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
 .tower-panel,
 .attacker-panel {
   display: grid;
@@ -801,7 +828,10 @@ select {
 .card {
   border: 1px solid #7c8aa4;
   border-radius: 0.75rem;
-  background: #fff;
+  background-color: rgba(255, 255, 255, 0.84);
+  background-image: url("assets/ui/tower_and_creep_selection_frame.png");
+  background-size: cover;
+  background-position: center;
   padding: 0.14rem;
   cursor: grab;
   user-select: none;
@@ -822,6 +852,7 @@ select {
 }
 
 .tower-icon-card,
+.attacker-icon-card,
 .attacker-icon-frame {
   width: calc(100% - 8px);
   height: calc(100% - 8px);
@@ -829,7 +860,8 @@ select {
   justify-self: stretch;
 }
 
-.tower-icon-card {
+.tower-icon-card,
+.attacker-icon-card {
   object-fit: contain;
   image-rendering: pixelated;
   pointer-events: none;
