@@ -397,19 +397,6 @@ window.MP = (function () {
           return false;
         }
 
-        const shouldYieldToCandidate = skipRoomId && ownWaitingRoom
-          ? _isRoomOlder(roomId, room, skipRoomId, ownWaitingRoom)
-          : false;
-        if (skipRoomId && ownWaitingRoom && !shouldYieldToCandidate) {
-          console.info("[MP] Staying host; candidate room is newer.", {
-            roomId,
-            ownRoomId: skipRoomId,
-            candidateCreatedAt: room.createdAt || null,
-            ownCreatedAt: ownWaitingRoom.createdAt || null
-          });
-          return false;
-        }
-
         const sameTab = room.hostTabId ? room.hostTabId === myTabId : room.host === myUid;
         if (sameTab) {
           console.debug("[MP] Skipping candidate room: same tab.", {
@@ -420,10 +407,6 @@ window.MP = (function () {
             tabId: myTabId
           });
           return false;
-        }
-
-        if (shouldYieldToCandidate) {
-          result.sawOlderRoom = true;
         }
 
         return true;
