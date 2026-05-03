@@ -79,53 +79,46 @@ const towerSpritePaths = {
 };
 
 const attackerDefs = [
-  { id: "imp", name: "Spider", cost: 2, hp: 20, speed: 0.1, color: "#1f2937" },
+  { id: "imp", name: "Imp", cost: 2, hp: 20, speed: 0.1, color: "#1f2937" },
   { id: "runner", name: "Runner", cost: 3, hp: 18, speed: 0.14, color: "#d97706" },
-  { id: "brute", name: "Eye", cost: 4, hp: 36, speed: 0.075, color: "#15803d" },
-  { id: "wisp", name: "Jellyfish", cost: 5, hp: 28, speed: 0.12, color: "#8b5cf6" },
+  { id: "brute", name: "Brute", cost: 4, hp: 36, speed: 0.075, color: "#15803d" },
+  { id: "wisp", name: "Wisp", cost: 5, hp: 28, speed: 0.12, color: "#8b5cf6" },
   { id: "tank", name: "Tank", cost: 6, hp: 52, speed: 0.062, color: "#0f766e" }
 ];
-const attackerIconPaths = {
-  imp: "assets/creeps/spider-icon.png",
-  runner: "assets/creeps/runner-icon.png",
-  brute: "assets/creeps/eye-icon.png",
-  wisp: "assets/creeps/jellyfish-icon.png",
-  tank: "assets/creeps/tank-icon.png"
-};
 const attackerSpriteConfig = {
   imp: {
     path: "assets/creeps/imp-sprite-sheet.png",
-    frameWidth: 272,
-    frameHeight: 206,
-    frames: 4,
+    frameWidth: 64,
+    frameHeight: 64,
+    frames: 3,
     fps: 6
   },
   runner: {
     path: "assets/creeps/runner-sprite-sheet.png",
-    frameWidth: 276,
-    frameHeight: 286,
-    frames: 4,
+    frameWidth: 64,
+    frameHeight: 64,
+    frames: 3,
     fps: 6
   },
   brute: {
     path: "assets/creeps/brute-sprite-sheet.png",
-    frameWidth: 270,
-    frameHeight: 272,
-    frames: 4,
+    frameWidth: 64,
+    frameHeight: 64,
+    frames: 3,
     fps: 6
   },
   wisp: {
     path: "assets/creeps/wisp-sprite-sheet.png",
-    frameWidth: 242,
-    frameHeight: 260,
-    frames: 4,
+    frameWidth: 64,
+    frameHeight: 64,
+    frames: 3,
     fps: 6
   },
   tank: {
     path: "assets/creeps/tank-sprite-sheet.png",
-    frameWidth: 270,
-    frameHeight: 302,
-    frames: 4,
+    frameWidth: 64,
+    frameHeight: 64,
+    frames: 3,
     fps: 6
   }
 };
@@ -137,8 +130,6 @@ for (const attackerId of Object.keys(attackerSpriteConfig)) {
   img.src = cfg.path;
   attackerSprites[attackerId] = img;
 }
-const battlefieldBackgroundImage = new Image();
-battlefieldBackgroundImage.src = "assets/arena/battlefield_background.png";
 
 const menuScreenEl = document.getElementById("menu-screen");
 const recordsScreenEl = document.getElementById("records-screen");
@@ -1177,7 +1168,9 @@ function createCards() {
     card.dataset.cost = String(attacker.cost);
     if (attackerSpriteConfig[attacker.id]) {
       card.innerHTML = `
-        <img class="attacker-icon-card" src="${attackerIconPaths[attacker.id] || attackerSpriteConfig[attacker.id].path}" alt="${attacker.name}" />
+        <div class="attacker-icon-frame">
+          <img class="attacker-icon-sheet" src="${attackerSpriteConfig[attacker.id].path}" alt="${attacker.name}" />
+        </div>
         <span class="attacker-cost">${attacker.cost}</span>
       `;
     } else {
@@ -2977,10 +2970,6 @@ function updateGame(dt) {
 function drawLane() {
   const w = canvas.width;
   const h = canvas.height;
-  if (battlefieldBackgroundImage.complete && battlefieldBackgroundImage.naturalWidth > 0) {
-    ctx.drawImage(battlefieldBackgroundImage, 0, 0, w, h);
-    return;
-  }
   if (!laneBackgroundCanvas || laneBackgroundCanvas.width !== w || laneBackgroundCanvas.height !== h) {
     laneBackgroundCanvas = createOffscreenCanvas(w, h);
     const laneCtx = laneBackgroundCanvas.getContext("2d");
@@ -3042,7 +3031,7 @@ function drawAttackers(units) {
     const spriteImg = attackerSprites[unit.defId];
     if (spriteCfg && spriteImg && spriteImg.complete) {
       const frame = Math.floor(state.animationClock * spriteCfg.fps) % spriteCfg.frames;
-      const spriteSize = 24;
+      const spriteSize = 20;
       const shouldInvertForAI = unit.owner === "ai" && (unit.defId === "wisp" || unit.defId === "tank");
       if (shouldInvertForAI) {
         ctx.save();
