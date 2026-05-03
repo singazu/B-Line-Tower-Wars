@@ -267,12 +267,11 @@
   // Fetch opponent data, reconstruct their side, then launch battle
   async function _launchBattleFromOpponentData() {
     try {
-      const data = await MP.getOpponentPrepData(state.waveNumber);
+      let data = await MP.getOpponentPrepData(state.waveNumber);
 
       if (!MP.validatePrepData(data)) {
-        console.error("[Lobby] Invalid opponent prep data:", data);
-        _handleOpponentForfeit("invalid-data");
-        return;
+        console.warn("[Lobby] Invalid opponent prep data; sanitizing.", data);
+        data = _sanitizeOpponentPrepData(data);
       }
 
       // Load opponent tower upgrades globally (used by makeAttacker)
@@ -313,6 +312,43 @@
       console.error("[Lobby] _launchBattleFromOpponentData error:", err);
       updateStatus("Network error loading opponent data\u2026");
     }
+  }
+
+  function _sanitizeOpponentPrepData(raw) {
+    const safe = (raw && typeof raw === "object") ? { ...raw } : {};
+    const validTowerIds = new Set(["violet", "yellow", "red", "green", "orange"]);
+    const validAttackerIds = new Set(attackerDefs.map((attacker) => attacker.id));
+
+    const towers = Array.isArray(safe.towers) ? safe.towers.slice(0, 5) : [];
+    while (towers.length < 5) towers.push(null);
+    for (let i = 0; i < towers.length; i += 1) {
+      const towerId = towers[i];
+      towers[i] = validTowerIds.has(towerId) ? towerId : null;
+    }
+    safe.towers = towers;
+
+    const levels = Array.isArray(safe.towerLevels) ? safe.towerLevels.slice(0, 5) : [];
+    while (levels.length < 5) levels.push(null);
+    for (let i = 0; i < levels.length; i += 1) {
+      if (safe.towers[i] === null) {
+        levels[i] = null;
+      } else {
+        const level = Number(levels[i]);
+        levels[i] = Number.isFinite(level) && level >= 1 ? Math.floor(level) : 1;
+      }
+    }
+    safe.towerLevels = levels;
+
+    const queue = Array.isArray(safe.queue) ? safe.queue.filter((id) => validAttackerIds.has(id)) : [];
+    safe.queue = queue;
+
+    const fanSeeds = Array.isArray(safe.fanSeeds) ? safe.fanSeeds : [];
+    safe.fanSeeds = queue.map((_, idx) => Number.isFinite(fanSeeds[idx]) ? fanSeeds[idx] : 0);
+
+    safe.towerUpgrades = (safe.towerUpgrades && typeof safe.towerUpgrades === "object") ? safe.towerUpgrades : {};
+    safe.attackerUpgrades = (safe.attackerUpgrades && typeof safe.attackerUpgrades === "object") ? safe.attackerUpgrades : {};
+
+    return safe;
   }
 
   // ---------------------------------------------------------------------------
