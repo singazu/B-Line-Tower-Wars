@@ -384,11 +384,12 @@ window.MP = (function () {
           return false;
         }
 
-        const stale = !room.createdAt || room.createdAt < now - STALE_QUEUE_MS;
+        const createdAt = Number.isFinite(room.createdAt) ? room.createdAt : null;
+        const stale = createdAt !== null && createdAt < now - STALE_QUEUE_MS;
         if (stale) {
           console.warn("[MP] Removing stale waiting room during scan.", {
             roomId,
-            createdAt: room.createdAt || null
+            createdAt
           });
           db.ref(`rooms/${roomId}`).remove().catch((err) => {
             console.warn("[MP] Failed to remove stale waiting room.", {
