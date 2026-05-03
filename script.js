@@ -1820,6 +1820,9 @@ function onBattleFinished() {
   console.warn(`[Game] onBattleFinished. wave=${state.waveNumber} multiplayerRole=${multiplayerRole}`);
   const clearFlag = () => { _battleResolving = false; };
   if (multiplayerRole !== null && window.Lobby) {
+    state.phase = "waiting";
+    updateStatus("Resolving round results...");
+    refreshAllUI();
     Promise.resolve(window.Lobby.onMultiplayerBattleFinished()).finally(clearFlag);
     return;
   }

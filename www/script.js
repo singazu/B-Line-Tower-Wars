@@ -1,6 +1,7 @@
 const PREP_SECONDS = 15;
 const MAX_ROUNDS = 10;
 const MANA_CAP = 99;
+const AI_MANA_BONUS_PER_ROUND = 3;
 const ROUND_BANNER_SECONDS = 1.8;
 const SHOP_UPGRADE_COST = 3;
 const TOWER_UPGRADE_COST = 5;
@@ -9,18 +10,66 @@ const TOWER_UPGRADE_MULTIPLIER = 1.2;
 const MAX_TOWER_UPGRADES = 2;
 const STATS_STORAGE_KEY = "bline-tower-wars-match-stats";
 const MATCH_STATE_STORAGE_KEY = "line-tower-wars-active-match";
-const TOWER_CONE_HALF_ANGLE_RAD = (65 * Math.PI) / 180;
-const TOWER_CONE_HALF_ANGLE_COS = Math.cos(TOWER_CONE_HALF_ANGLE_RAD);
+
+// Multiplayer mode — set by lobby.js when a match is found, cleared on exit
+let multiplayerRole          = null;   // null | "host" | "guest"
+let multiplayerRoomId        = null;
+let multiplayerOpponentName  = "Opponent";
+let opponentAttackerUpgrades = {};     // loaded from Firebase before each battle
+const BASE_TOWER_CONE_DEGREES = 130;
 const LOGICAL_CANVAS_WIDTH = 420;
 const LOGICAL_CANVAS_HEIGHT = 760;
 
 const towerDefs = [
-  { id: "violet", name: "Violet", cost: 2, damage: 2, range: 0.378, fireRate: 0.85, color: "#7c3aed" },
-  { id: "yellow", name: "Yellow", cost: 5, damage: 2, range: 0.473, fireRate: 0.95, color: "#eab308" },
-  { id: "red", name: "Red", cost: 7, damage: 3, range: 0.434, fireRate: 1.05, color: "#dc2626" },
-  { id: "green", name: "Green", cost: 9, damage: 4, range: 0.529, fireRate: 1.15, color: "#22c55e" },
-  { id: "orange", name: "Orange", cost: 13, damage: 5, range: 0.492, fireRate: 1.25, color: "#f97316" }
+  { id: "violet", name: "Violet", cost: 2, damage: 2, range: 0.416, fireRate: 0.85, color: "#7c3aed", coneDegrees: 220, maxTargets: 1 },
+  { id: "yellow", name: "Yellow", cost: 5, damage: 2, range: 0.473, fireRate: 0.95, color: "#eab308", coneDegrees: BASE_TOWER_CONE_DEGREES * 1.1, maxTargets: 1 },
+  { id: "red", name: "Red", cost: 7, damage: 3, range: 0.434, fireRate: 1.05, color: "#dc2626", coneDegrees: BASE_TOWER_CONE_DEGREES, maxTargets: 1 },
+  { id: "green", name: "Green", cost: 9, damage: 4, range: 0.635, fireRate: 1.15, color: "#22c55e", coneDegrees: BASE_TOWER_CONE_DEGREES * 0.9, maxTargets: 1 },
+  { id: "orange", name: "Orange", cost: 13, damage: 4, range: 0.492, fireRate: 1.25, color: "#f97316", coneDegrees: 200, maxTargets: 2 }
 ];
+const TOWER_LEVEL_RULES = {
+  violet: {
+    maxLevel: 2,
+    damagePerLevel: 1,
+    rangePerLevel: 1.2,
+    fireRatePerLevel: 1.5,
+    iconScalePerLevel: 1.2
+  },
+  yellow: {
+    maxLevel: 2,
+    damagePerLevel: 1,
+    rangePerLevel: 1,
+    fireRatePerLevel: 1.25,
+    iconScalePerLevel: 1.2,
+    slowDurationPerLevel: 1.5
+  },
+  red: {
+    maxLevel: 2,
+    damagePerLevel: 1.5,
+    rangePerLevel: 1.1,
+    fireRatePerLevel: 1,
+    iconScalePerLevel: 1.2,
+    shrapnelDamagePerLevel: 1.5
+  },
+  green: {
+    maxLevel: 2,
+    damagePerLevel: 1.5,
+    rangePerLevel: 1.1,
+    fireRatePerLevel: 1.2,
+    iconScalePerLevel: 1.2,
+    poisonDotPerLevel: 1.5
+  },
+  orange: {
+    maxLevel: 2,
+    damagePerLevel: 1.2,
+    rangePerLevel: 1.1,
+    fireRatePerLevel: 1,
+    iconScalePerLevel: 1.2,
+    maxTargetsByLevel: {
+      2: 3
+    }
+  }
+};
 const towerSpritePaths = {
   violet: "assets/towers/violet.png",
   yellow: "assets/towers/yellow.png",
@@ -28,13 +77,6 @@ const towerSpritePaths = {
   green: "assets/towers/green.png",
   orange: "assets/towers/orange.png"
 };
-
-const towerSprites = {};
-for (const tower of towerDefs) {
-  const img = new Image();
-  img.src = towerSpritePaths[tower.id];
-  towerSprites[tower.id] = img;
-}
 
 const attackerDefs = [
   { id: "imp", name: "Imp", cost: 2, hp: 20, speed: 0.1, color: "#1f2937" },
@@ -108,6 +150,7 @@ const playerScoreEl = document.getElementById("player-score");
 const aiScoreEl = document.getElementById("ai-score");
 const waveNumberEl = document.getElementById("wave-number");
 const playerManaEl = document.getElementById("player-mana");
+const shopManaValueEl = document.getElementById("shop-mana-value");
 const phaseLabelEl = document.getElementById("phase-label");
 const phaseTimerEl = document.getElementById("phase-timer");
 const waveProgressFillEl = document.getElementById("wave-progress-fill");
@@ -148,6 +191,7 @@ const ctx = canvas.getContext("2d");
 const BATTLEFIELD_BOTTOM_TRIM_PX = 10;
 const FIELD_SHIFT_Y = BATTLEFIELD_BOTTOM_TRIM_PX / LOGICAL_CANVAS_HEIGHT;
 const prefersTouchInput = window.matchMedia("(pointer: coarse)").matches || ("ontouchstart" in window);
+const DESKTOP_GAME_WIDTH = 430;
 
 const state = {
   screen: "menu",
@@ -169,10 +213,12 @@ const state = {
   attackersPlayer: [],
   attackersAI: [],
   projectiles: [],
+  fireBursts: [],
   towerFlashes: [],
   deathParticles: [],
   nextUnitId: 1,
   nextProjectileId: 1,
+  nextFireBurstId: 1,
   aiDraftDone: false,
   animationClock: 0,
   roundBannerTimer: ROUND_BANNER_SECONDS,
@@ -202,11 +248,16 @@ const state = {
     red: 0,
     green: 0,
     orange: 0
+  },
+  roundManaBonusPending: {
+    player: 0,
+    ai: 0
   }
 };
 
 let activeDragPayload = "";
 let selectedTowerId = null;
+let touchDragState = null;
 let audioCtx = null;
 let audioUnlocked = false;
 let lastAppHiddenAt = null;
@@ -245,12 +296,46 @@ let persistentStats = createEmptyPersistentStats();
 let statsSaveTimeout = null;
 
 function updateViewportHeight() {
-  const height = window.innerHeight || document.documentElement.clientHeight;
+  const height = Math.round(window.visualViewport?.height || window.innerHeight || document.documentElement.clientHeight);
   document.documentElement.style.setProperty("--app-height", `${height}px`);
+  updateDesktopGameFit();
+}
+
+function isDesktopGameFitViewport() {
+  return window.matchMedia("(min-width: 901px) and (pointer: fine)").matches;
+}
+
+function updateDesktopGameFit() {
+  const shouldFitDesktopGame = state.screen === "game" && isDesktopGameFitViewport();
+  appShellEl.classList.toggle("desktop-game-fit", shouldFitDesktopGame);
+  gameScreenEl.classList.toggle("desktop-game-fit", shouldFitDesktopGame);
+
+  if (!shouldFitDesktopGame) {
+    gameScreenEl.style.removeProperty("zoom");
+    gameScreenEl.style.removeProperty("max-width");
+    gameScreenEl.style.removeProperty("margin-inline");
+    return;
+  }
+
+  gameScreenEl.style.setProperty("max-width", `${DESKTOP_GAME_WIDTH}px`);
+  gameScreenEl.style.setProperty("margin-inline", "auto");
+  gameScreenEl.style.setProperty("zoom", "1");
+
+  const shellStyles = window.getComputedStyle(appShellEl);
+  const shellPaddingTop = Number.parseFloat(shellStyles.paddingTop) || 0;
+  const shellPaddingBottom = Number.parseFloat(shellStyles.paddingBottom) || 0;
+  const availableHeight = Math.max(
+    320,
+    (window.visualViewport?.height || window.innerHeight) - shellPaddingTop - shellPaddingBottom
+  );
+  const naturalHeight = Math.max(1, gameScreenEl.scrollHeight);
+  const fitScale = Math.min(1, availableHeight / naturalHeight);
+  gameScreenEl.style.setProperty("zoom", fitScale.toFixed(3));
 }
 
 function resizeBattlefieldFrame() {
   if (state.screen !== "game") {
+    updateDesktopGameFit();
     return;
   }
 
@@ -262,31 +347,35 @@ function resizeBattlefieldFrame() {
   const aspect = LOGICAL_CANVAS_WIDTH / LOGICAL_CANVAS_HEIGHT;
   const maxWidth = Math.max(220, zoneRect.width);
   const maxHeight = Math.max(260, zoneRect.height);
+  const isMobilePortrait = window.matchMedia("(pointer: coarse) and (orientation: portrait)").matches;
   let frameWidth = maxWidth;
   let frameHeight = frameWidth / aspect;
 
-  if (frameHeight > maxHeight) {
+  if (isMobilePortrait) {
+    // On phone portrait, prioritize fitting the full gameplay UI in one screen.
+    const viewportHeight = window.visualViewport?.height || window.innerHeight || document.documentElement.clientHeight;
+    const cappedHeight = Math.max(280, Math.min(maxHeight, viewportHeight * 0.48));
+    frameHeight = cappedHeight;
+  } else if (frameHeight > maxHeight) {
     frameHeight = maxHeight;
     frameWidth = frameHeight * aspect;
   }
 
   arenaDropZoneEl.style.width = `${Math.round(frameWidth)}px`;
   arenaDropZoneEl.style.height = `${Math.round(frameHeight)}px`;
+  updateDesktopGameFit();
 }
 
 function updateOrientationNotice() {
-  const isPortrait = window.matchMedia("(orientation: portrait)").matches;
-  orientationNoticeEl.classList.toggle("hidden", !prefersTouchInput || !isPortrait);
+  if (!orientationNoticeEl) {
+    return;
+  }
+  // Portrait-first mobile UX: never block gameplay with orientation prompts.
+  orientationNoticeEl.classList.add("hidden");
 }
 
 async function lockLandscapeOrientation() {
-  if (prefersTouchInput && screen.orientation?.lock) {
-    try {
-      await screen.orientation.lock("landscape");
-    } catch {
-    }
-  }
-
+  // Intentionally no-op: do not force landscape on mobile.
   updateOrientationNotice();
 }
 
@@ -492,7 +581,7 @@ function queueStatsSave() {
 }
 
 function saveMatchStateNow() {
-  if (!state.hasActiveMatch || state.gameOver) {
+  if (!state.hasActiveMatch || state.gameOver || multiplayerRole !== null) {
     localStorage.removeItem(MATCH_STATE_STORAGE_KEY);
     return;
   }
@@ -515,10 +604,12 @@ function saveMatchStateNow() {
     attackersPlayer: state.attackersPlayer,
     attackersAI: state.attackersAI,
     projectiles: state.projectiles,
+    fireBursts: state.fireBursts,
     towerFlashes: state.towerFlashes,
     deathParticles: state.deathParticles,
     nextUnitId: state.nextUnitId,
     nextProjectileId: state.nextProjectileId,
+    nextFireBurstId: state.nextFireBurstId,
     aiDraftDone: state.aiDraftDone,
     animationClock: state.animationClock,
     roundBannerTimer: state.roundBannerTimer,
@@ -533,6 +624,7 @@ function saveMatchStateNow() {
     playerAttackerUpgrades: state.playerAttackerUpgrades,
     matchUsage: state.matchUsage,
     soundCooldowns: state.soundCooldowns,
+    roundManaBonusPending: state.roundManaBonusPending,
     hasActiveMatch: state.hasActiveMatch
   };
 
@@ -555,6 +647,14 @@ function restoreSavedMatchState() {
     }
 
     Object.assign(state, snapshot);
+    state.fireBursts = Array.isArray(state.fireBursts) ? state.fireBursts : [];
+    state.nextFireBurstId = Number.isFinite(state.nextFireBurstId) ? state.nextFireBurstId : 1;
+    state.roundManaBonusPending = state.roundManaBonusPending && typeof state.roundManaBonusPending === "object"
+      ? {
+          player: Number.isFinite(state.roundManaBonusPending.player) ? state.roundManaBonusPending.player : 0,
+          ai: Number.isFinite(state.roundManaBonusPending.ai) ? state.roundManaBonusPending.ai : 0
+        }
+      : { player: 0, ai: 0 };
     state.gameOver = false;
     state.hasActiveMatch = true;
     state.paused = true;
@@ -682,7 +782,7 @@ function renderRankingRows(container, items, emptyLabel) {
 
 function refreshMenuUI() {
   const profile = getProfileStats();
-  const hasResume = state.hasActiveMatch && !state.gameOver;
+  const hasResume = state.hasActiveMatch && !state.gameOver && multiplayerRole === null;
   playMatchBtnEl.textContent = hasResume ? "Start New Match" : "Play Match";
   resumeMatchBtnEl.classList.toggle("hidden", !hasResume);
   menuMetaEl.textContent = profile.matchesPlayed > 0
@@ -725,6 +825,7 @@ function setScreen(screen) {
   refreshRecordsUI();
   updateOrientationNotice();
   requestAnimationFrame(resizeBattlefieldFrame);
+  requestAnimationFrame(updateDesktopGameFit);
 }
 
 function recordUnitScore(attackerId, owner) {
@@ -737,6 +838,24 @@ function recordTowerKill(towerId, owner) {
   persistentStats.towerKills.total[towerId] += 1;
   persistentStats.towerKills[owner][towerId] += 1;
   queueStatsSave();
+}
+
+function grantRoundManaBonus(owner, amount = 1, source = "kill") {
+  if (owner !== "player" && owner !== "ai") {
+    return;
+  }
+  if (!Number.isFinite(amount) || amount <= 0) {
+    return;
+  }
+  if (owner === "player") {
+    state.playerMana = clamp(state.playerMana + amount, 0, MANA_CAP);
+    playBonusManaSfx(source);
+  } else {
+    state.aiMana = clamp(state.aiMana + amount, 0, MANA_CAP);
+  }
+
+  // Keep legacy field neutral for save compatibility with old sessions.
+  state.roundManaBonusPending[owner] = 0;
 }
 
 function markMatchUsage(kind, id, owner) {
@@ -787,16 +906,67 @@ function getPlayerTowerUpgradeLevel(towerId) {
   return 1 + (state.playerTowerUpgrades[towerId] || 0);
 }
 
-function createTowerInstance(def, owner = "player") {
+function getTowerLevelRule(towerId) {
+  const rule = TOWER_LEVEL_RULES[towerId];
+  if (!rule) {
+    return {
+      maxLevel: 1,
+      damagePerLevel: 1,
+      rangePerLevel: 1,
+      fireRatePerLevel: 1,
+      iconScalePerLevel: 1
+    };
+  }
+  return rule;
+}
+
+function getTowerMaxLevel(towerId) {
+  return Math.max(1, getTowerLevelRule(towerId).maxLevel || 1);
+}
+
+function createTowerInstance(def, owner = "player", level = 1) {
   const upgradeMultiplier = owner === "player"
     ? Math.pow(TOWER_UPGRADE_MULTIPLIER, state.playerTowerUpgrades[def.id] || 0)
     : 1;
+  const levelRule = getTowerLevelRule(def.id);
+  const safeLevel = clamp(Math.floor(level), 1, getTowerMaxLevel(def.id));
+  const levelSteps = safeLevel - 1;
+  const levelDamageMultiplier = Math.pow(levelRule.damagePerLevel, levelSteps);
+  const levelRangeMultiplier = Math.pow(levelRule.rangePerLevel, levelSteps);
+  const levelFireRateMultiplier = Math.pow(levelRule.fireRatePerLevel, levelSteps);
+  const iconScale = Math.pow(levelRule.iconScalePerLevel, levelSteps);
+  const slowDurationPerLevel = levelRule.slowDurationPerLevel || 1;
+  const shrapnelDamagePerLevel = levelRule.shrapnelDamagePerLevel || 1;
+  const poisonDotPerLevel = levelRule.poisonDotPerLevel || 1;
+  const slowDuration = def.id === "yellow"
+    ? 1.2 * Math.pow(slowDurationPerLevel, levelSteps)
+    : 0;
+  const shrapnelDamageMultiplier = def.id === "red"
+    ? Math.pow(shrapnelDamagePerLevel, levelSteps)
+    : 1;
+  const poisonDotMultiplier = def.id === "green"
+    ? Math.pow(poisonDotPerLevel, levelSteps)
+    : 1;
+  const maxTargetsByLevel = levelRule.maxTargetsByLevel || null;
+  const scaledMaxTargets = maxTargetsByLevel && Number.isFinite(maxTargetsByLevel[safeLevel])
+    ? maxTargetsByLevel[safeLevel]
+    : Math.max(1, def.maxTargets || 1);
+  const coneDegrees = Number.isFinite(def.coneDegrees) ? def.coneDegrees : BASE_TOWER_CONE_DEGREES;
   return {
     ...def,
-    damage: def.damage * upgradeMultiplier,
-    range: def.range * upgradeMultiplier,
-    fireRate: def.fireRate / upgradeMultiplier,
-    cooldown: 0
+    level: safeLevel,
+    iconScale,
+    slowDuration,
+    shrapnelDamageMultiplier,
+    poisonDotMultiplier,
+    damage: def.damage * upgradeMultiplier * levelDamageMultiplier,
+    range: def.range * upgradeMultiplier * levelRangeMultiplier,
+    fireRate: def.fireRate / (upgradeMultiplier * levelFireRateMultiplier),
+    cooldown: 0,
+    coneDegrees,
+    coneHalfAngleRad: (coneDegrees * Math.PI) / 360,
+    coneHalfAngleCos: Math.cos((coneDegrees * Math.PI) / 360),
+    maxTargets: Math.max(1, scaledMaxTargets)
   };
 }
 
@@ -808,6 +978,7 @@ function towerPowerScore(tower) {
 }
 
 function resetMatch() {
+  _battleResolving = false;
   state.waveNumber = 1;
   state.phase = "banner";
   state.phaseTimer = PREP_SECONDS;
@@ -826,10 +997,12 @@ function resetMatch() {
   state.attackersPlayer = [];
   state.attackersAI = [];
   state.projectiles = [];
+  state.fireBursts = [];
   state.towerFlashes = [];
   state.deathParticles = [];
   state.nextUnitId = 1;
   state.nextProjectileId = 1;
+  state.nextFireBurstId = 1;
   state.aiDraftDone = false;
   state.animationClock = 0;
   state.roundBannerTimer = ROUND_BANNER_SECONDS;
@@ -858,6 +1031,9 @@ function resetMatch() {
   state.soundCooldowns.red = 0;
   state.soundCooldowns.green = 0;
   state.soundCooldowns.orange = 0;
+  state.roundManaBonusPending.player = 0;
+  state.roundManaBonusPending.ai = 0;
+  state._aiFanSeeds = [];
 
   previousTime = performance.now();
   updateStatus("Round 1 coming up.");
@@ -957,6 +1133,14 @@ function createCards() {
         activeDragPayload = "";
       });
     }
+    if (prefersTouchInput) {
+      card.addEventListener("pointerdown", (event) => {
+        if (event.pointerType !== "touch" || state.phase === "shop" || !isPlayerInputAllowed()) {
+          return;
+        }
+        startTouchDrag(event, `tower:${tower.id}`, "tower");
+      });
+    }
     card.addEventListener("click", () => {
       if (state.phase === "shop") {
         state.shopSelectionType = "tower";
@@ -1006,6 +1190,14 @@ function createCards() {
         activeDragPayload = "";
       });
     }
+    if (prefersTouchInput) {
+      card.addEventListener("pointerdown", (event) => {
+        if (event.pointerType !== "touch" || state.phase === "shop" || !isPlayerInputAllowed()) {
+          return;
+        }
+        startTouchDrag(event, `attacker:${attacker.id}`, "attacker");
+      });
+    }
     card.addEventListener("click", () => {
       if (state.phase === "shop") {
         state.shopSelectionType = "attacker";
@@ -1022,6 +1214,122 @@ function createCards() {
   }
 }
 
+function startTouchDrag(event, payload, kind) {
+  if (touchDragState || !isPlayerInputAllowed()) {
+    return;
+  }
+
+  const sourceCard = event.currentTarget;
+  const sourceRect = sourceCard.getBoundingClientRect();
+  const ghostEl = sourceCard.cloneNode(true);
+  ghostEl.style.position = "fixed";
+  ghostEl.style.left = `${sourceRect.left}px`;
+  ghostEl.style.top = `${sourceRect.top}px`;
+  ghostEl.style.width = `${sourceRect.width}px`;
+  ghostEl.style.height = `${sourceRect.height}px`;
+  ghostEl.style.opacity = "0.8";
+  ghostEl.style.pointerEvents = "none";
+  ghostEl.style.zIndex = "9999";
+  ghostEl.style.transform = "scale(0.96)";
+  ghostEl.style.boxShadow = "0 10px 20px rgba(2, 6, 23, 0.4)";
+  document.body.appendChild(ghostEl);
+
+  touchDragState = {
+    pointerId: event.pointerId,
+    payload,
+    kind,
+    ghostEl
+  };
+  activeDragPayload = payload;
+
+  updateTouchDragGhost(event.clientX, event.clientY);
+  document.addEventListener("pointermove", onTouchDragMove, { passive: false });
+  document.addEventListener("pointerup", onTouchDragEnd, { passive: false });
+  document.addEventListener("pointercancel", onTouchDragCancel, { passive: false });
+}
+
+function updateTouchDragGhost(clientX, clientY) {
+  if (!touchDragState?.ghostEl) {
+    return;
+  }
+  const ghostRect = touchDragState.ghostEl.getBoundingClientRect();
+  touchDragState.ghostEl.style.left = `${Math.round(clientX - ghostRect.width / 2)}px`;
+  touchDragState.ghostEl.style.top = `${Math.round(clientY - ghostRect.height / 2)}px`;
+}
+
+function clearTouchDragHighlights() {
+  playerSlotsEl.querySelectorAll(".tower-slot.over").forEach((slot) => slot.classList.remove("over"));
+}
+
+function onTouchDragMove(event) {
+  if (!touchDragState || event.pointerId !== touchDragState.pointerId) {
+    return;
+  }
+  event.preventDefault();
+  updateTouchDragGhost(event.clientX, event.clientY);
+
+  if (touchDragState.kind !== "tower") {
+    return;
+  }
+  clearTouchDragHighlights();
+  const slotEl = document.elementFromPoint(event.clientX, event.clientY)?.closest(".tower-slot.player");
+  if (slotEl && isPlayerInputAllowed()) {
+    slotEl.classList.add("over");
+  }
+}
+
+function endTouchDragInternal(clientX, clientY, shouldApplyDrop) {
+  if (!touchDragState) {
+    return;
+  }
+
+  if (touchDragState.ghostEl?.parentNode) {
+    touchDragState.ghostEl.parentNode.removeChild(touchDragState.ghostEl);
+  }
+  clearTouchDragHighlights();
+
+  if (shouldApplyDrop && isPlayerInputAllowed()) {
+    if (touchDragState.kind === "tower" && touchDragState.payload.startsWith("tower:")) {
+      const slotEl = document.elementFromPoint(clientX, clientY)?.closest(".tower-slot.player");
+      if (slotEl) {
+        const slotIndex = Number(slotEl.dataset.slotIndex);
+        const towerId = touchDragState.payload.split(":")[1];
+        if (Number.isInteger(slotIndex)) {
+          placePlayerTower(slotIndex, towerId);
+        }
+      }
+    } else if (touchDragState.kind === "attacker" && touchDragState.payload.startsWith("attacker:")) {
+      const dropInsideArena = !!document.elementFromPoint(clientX, clientY)?.closest("#arena-drop-zone");
+      if (dropInsideArena) {
+        const attackerId = touchDragState.payload.split(":")[1];
+        queuePlayerAttacker(attackerId);
+      }
+    }
+  }
+
+  touchDragState = null;
+  activeDragPayload = "";
+  document.removeEventListener("pointermove", onTouchDragMove);
+  document.removeEventListener("pointerup", onTouchDragEnd);
+  document.removeEventListener("pointercancel", onTouchDragCancel);
+}
+
+function onTouchDragEnd(event) {
+  if (!touchDragState || event.pointerId !== touchDragState.pointerId) {
+    return;
+  }
+  event.preventDefault();
+  endTouchDragInternal(event.clientX, event.clientY, true);
+}
+
+function onTouchDragCancel(event) {
+  if (!touchDragState || event.pointerId !== touchDragState.pointerId) {
+    return;
+  }
+  event.preventDefault();
+  endTouchDragInternal(event.clientX, event.clientY, false);
+}
+
 function isPlayerInputAllowed() {
   return state.screen === "game" && !state.gameOver && state.phase === "prep";
 }
@@ -1033,6 +1341,13 @@ function placePlayerTower(slotIndex, towerId) {
     return;
   }
 
+  const existingTower = state.playerTowers[slotIndex];
+  if (existingTower && existingTower.id === towerDef.id && existingTower.level >= getTowerMaxLevel(towerDef.id)) {
+    updateStatus(`${towerDef.name} tower is already at max level in slot ${slotIndex + 1}.`);
+    triggerPlacementHaptic("error");
+    return;
+  }
+
   if (state.playerMana < towerDef.cost) {
     updateStatus("Not enough mana for that tower.");
     triggerPlacementHaptic("error");
@@ -1040,10 +1355,20 @@ function placePlayerTower(slotIndex, towerId) {
   }
 
   state.playerMana -= towerDef.cost;
-  state.playerTowers[slotIndex] = createTowerInstance(towerDef, "player");
+  const canUpgradeExisting = !!existingTower
+    && existingTower.id === towerDef.id
+    && existingTower.level < getTowerMaxLevel(towerDef.id);
+
+  if (canUpgradeExisting) {
+    const nextLevel = existingTower.level + 1;
+    state.playerTowers[slotIndex] = createTowerInstance(towerDef, "player", nextLevel);
+    updateStatus(`Upgraded ${towerDef.name} tower to level ${nextLevel} in slot ${slotIndex + 1}.`);
+  } else {
+    state.playerTowers[slotIndex] = createTowerInstance(towerDef, "player", 1);
+    updateStatus(`Placed ${towerDef.name} tower in slot ${slotIndex + 1}.`);
+  }
   state.matchStats.towersPlaced += 1;
   markMatchUsage("towers", towerId, "player");
-  updateStatus(`Placed ${towerDef.name} tower in slot ${slotIndex + 1}.`);
   triggerPlacementHaptic("impact");
   clearSelectedTower();
   refreshAllUI();
@@ -1136,8 +1461,9 @@ function refreshTowerSlots() {
     if (!tower) {
       return "";
     }
+    const safeLevel = Math.max(1, Number(tower.level) || 1);
     return `<div class="slot-tower">
-      <img class="tower-icon-slot" src="${towerSpritePaths[tower.id]}" alt="${tower.name} tower" />
+      <img class="tower-icon-slot level-${safeLevel}" src="${towerSpritePaths[tower.id]}" alt="${tower.name} tower" />
     </div>`;
   };
 
@@ -1160,12 +1486,15 @@ function refreshHUD() {
   aiScoreEl.textContent = String(state.aiScore);
   waveNumberEl.textContent = String(state.waveNumber);
   playerManaEl.textContent = String(state.playerMana);
+  if (shopManaValueEl) shopManaValueEl.textContent = String(state.playerMana);
   if (state.phase === "prep") {
     phaseLabelEl.textContent = "Prep";
   } else if (state.phase === "battle") {
     phaseLabelEl.textContent = "Battle";
   } else if (state.phase === "shop") {
     phaseLabelEl.textContent = "Shop";
+  } else if (state.phase === "waiting") {
+    phaseLabelEl.textContent = "Wait";
   } else {
     phaseLabelEl.textContent = "Round";
   }
@@ -1183,6 +1512,8 @@ function refreshHUD() {
   const canSkipToBattle = !state.gameOver && !state.paused && state.phase === "prep" && !state.battleSkipUsedThisRound;
   battleSkipBtnEl.disabled = !canSkipToBattle;
   battleSkipBtnEl.hidden = state.screen !== "game" || !canSkipToBattle;
+  // Pause is disabled in multiplayer — both players cannot pause a live match
+  pauseBtnEl.hidden = multiplayerRole !== null;
   pauseBtnEl.textContent = state.paused ? "Resume" : "Pause";
 }
 
@@ -1256,14 +1587,15 @@ function updateStatus(text) {
   statusTextEl.textContent = text;
 }
 
-function makeAttacker(owner, attackerId, sequenceOffset) {
+function makeAttacker(owner, attackerId, sequenceOffset, fanSeedOverride) {
   const def = getAttackerDef(attackerId);
   const id = state.nextUnitId;
   state.nextUnitId += 1;
-  const fanSeed = Math.random() * 2 - 1;
+  // In multiplayer, opponent units use precomputed fanSeeds for determinism
+  const fanSeed = (fanSeedOverride !== undefined) ? fanSeedOverride : (Math.random() * 2 - 1);
   const upgradeMultiplier = owner === "player"
     ? Math.pow(ATTACKER_UPGRADE_MULTIPLIER, state.playerAttackerUpgrades[attackerId] || 0)
-    : 1;
+    : Math.pow(ATTACKER_UPGRADE_MULTIPLIER, opponentAttackerUpgrades[attackerId] || 0);
 
   return {
     id,
@@ -1271,22 +1603,60 @@ function makeAttacker(owner, attackerId, sequenceOffset) {
     defId: def.id,
     hp: def.hp * upgradeMultiplier,
     maxHp: def.hp * upgradeMultiplier,
+    baseSpeed: def.speed * upgradeMultiplier,
     speed: def.speed * upgradeMultiplier,
     color: def.color,
-    progress: -sequenceOffset * 0.035,
+    progress: -sequenceOffset,
     fanSeed,
+    slowTimer: 0,
+    poisonTimer: 0,
+    poisonTicksRemaining: 0,
+    poisonTickInterval: 1,
+    poisonTickTimer: 0,
+    poisonBaseDamage: 0,
+    poisonSourceOwner: null,
+    shootCooldown: 0,
     isDefeated: false
   };
 }
 
+function buildSpawnOffsets(queue) {
+  const offsets = [];
+  let cumulative = 0;
+  for (let i = 0; i < queue.length; i += 1) {
+    offsets.push(cumulative);
+    const baseGap = 0.035;
+    const leadGapBonus = queue[i] === "tank" ? 0.11 : 0;
+    cumulative += baseGap + leadGapBonus;
+  }
+  return offsets;
+}
+
 function launchWave() {
+  // In multiplayer: hand off to lobby.js to sync with opponent first
+  if (multiplayerRole !== null && window.Lobby) {
+    window.Lobby.submitPrepPhaseData();
+    return;
+  }
+  _doLaunchWave();
+}
+
+// Internal battle launch — called directly in singleplayer, or by lobby.js
+// after both players have submitted their prep data.
+function _doLaunchWave() {
   state.phase = "battle";
   state.aiDraftDone = false;
   clearSelectedTower();
 
-  state.attackersPlayer = state.playerQueue.map((attackerId, idx) => makeAttacker("player", attackerId, idx));
-  state.attackersAI = state.aiQueue.map((attackerId, idx) => makeAttacker("ai", attackerId, idx));
+  const aiFanSeeds = state._aiFanSeeds || [];
+  const playerOffsets = buildSpawnOffsets(state.playerQueue);
+  const aiOffsets = buildSpawnOffsets(state.aiQueue);
+  state.attackersPlayer = state.playerQueue.map((attackerId, idx) => makeAttacker("player", attackerId, playerOffsets[idx]));
+  state.attackersAI     = state.aiQueue.map((attackerId, idx)    => makeAttacker("ai", attackerId, aiOffsets[idx], aiFanSeeds[idx]));
+  state._aiFanSeeds = [];
+
   state.projectiles = [];
+  state.fireBursts = [];
   state.towerFlashes = [];
   state.deathParticles = [];
 
@@ -1303,6 +1673,9 @@ window.addEventListener("orientationchange", () => {
   updateViewportHeight();
   lockLandscapeOrientation();
 });
+if (window.visualViewport?.addEventListener) {
+  window.visualViewport.addEventListener("resize", updateViewportHeight);
+}
 document.addEventListener("visibilitychange", () => {
   if (document.hidden) {
     lastAppHiddenAt = performance.now();
@@ -1334,7 +1707,13 @@ function beginPrepPhase() {
   state.aiDraftDone = false;
   clearSelectedTower();
 
-  prepareAIMoves();
+  if (multiplayerRole !== null) {
+    // Opponent IS the AI — suppress local AI draft; aiDraftDone stays false
+    // until set true below so updateGame() doesn't try to run prepareAIMoves()
+    state.aiDraftDone = true;
+  } else {
+    prepareAIMoves();
+  }
   refreshAllUI();
   updateStatus(`Round ${state.waveNumber} prep. Queue attackers and place towers.`);
 }
@@ -1350,9 +1729,12 @@ function beginRoundBanner() {
 }
 
 function openRoundShop() {
+  console.warn(`[Game] advanceToNextRound called. waveNumber before increment=${state.waveNumber}`);
   const gain = 9 + state.waveNumber;
   state.playerMana = clamp(state.playerMana + gain, 0, MANA_CAP);
-  state.aiMana = clamp(state.aiMana + gain, 0, MANA_CAP);
+  state.aiMana = clamp(state.aiMana + gain + AI_MANA_BONUS_PER_ROUND, 0, MANA_CAP);
+  state.roundManaBonusPending.player = 0;
+  state.roundManaBonusPending.ai = 0;
   state.waveNumber += 1;
   beginRoundBanner();
   updateStatus(`Round ${state.waveNumber} begins soon.`);
@@ -1361,6 +1743,7 @@ function openRoundShop() {
 function buildMatchSummary() {
   const margin = state.playerScore - state.aiScore;
   const profile = getProfileStats();
+  const opponentLabel = multiplayerRole !== null ? multiplayerOpponentName : "AI";
   let title = "Battle Report";
   let copy = `Final score ${state.playerScore} to ${state.aiScore}.`;
 
@@ -1368,10 +1751,10 @@ function buildMatchSummary() {
     title = "Victory";
     copy = margin > 1
       ? `You secured the lane ${state.playerScore} to ${state.aiScore} and closed the match with room to spare.`
-      : `You edged out the AI ${state.playerScore} to ${state.aiScore} in a tight final round.`;
+      : `You edged out ${opponentLabel} ${state.playerScore} to ${state.aiScore} in a tight final round.`;
   } else if (state.matchWinner === "ai") {
     title = "Defeat";
-    copy = `The AI held the lane ${state.aiScore} to ${state.playerScore}. Review your records, then adjust your next build.`;
+    copy = `${opponentLabel} held the lane ${state.aiScore} to ${state.playerScore}. Review your records, then adjust your next build.`;
   } else {
     title = "Draw";
     copy = `Both commanders finished level at ${state.playerScore}. A sharper lane plan can swing the rematch.`;
@@ -1391,6 +1774,7 @@ function buildMatchSummary() {
 }
 
 function finishMatch() {
+  console.warn(`[Game] finishMatch called. waveNumber=${state.waveNumber} playerScore=${state.playerScore} aiScore=${state.aiScore} multiplayerRole=${multiplayerRole}`);
   state.phase = "gameover";
   state.gameOver = true;
   if (state.playerScore === state.aiScore) {
@@ -1427,12 +1811,30 @@ function finishMatch() {
   refreshAllUI();
 }
 
+let _battleResolving = false;
 function onBattleFinished() {
-  if (state.waveNumber >= MAX_ROUNDS) {
-    finishMatch();
+  if (_battleResolving) {
     return;
   }
-  openRoundShop();
+  _battleResolving = true;
+  console.warn(`[Game] onBattleFinished. wave=${state.waveNumber} multiplayerRole=${multiplayerRole}`);
+  const clearFlag = () => { _battleResolving = false; };
+  if (multiplayerRole !== null && window.Lobby) {
+    state.phase = "waiting";
+    updateStatus("Resolving round results...");
+    refreshAllUI();
+    Promise.resolve(window.Lobby.onMultiplayerBattleFinished()).finally(clearFlag);
+    return;
+  }
+  try {
+    if (state.waveNumber >= MAX_ROUNDS) {
+      finishMatch();
+      return;
+    }
+    openRoundShop();
+  } finally {
+    clearFlag();
+  }
 }
 
 function applyTowerUpgradeToPlacedTowers(towerId) {
@@ -1504,12 +1906,18 @@ function totalDefenseScore(towers) {
 }
 
 function pickBestAITowerPlacement(mana, defenseBudget, playerDefenseScore, waveNumber) {
+  const usedTowerTypes = new Set();
   const towerCounts = {};
   for (const tower of state.aiTowers) {
     if (tower) {
+      usedTowerTypes.add(tower.id);
       towerCounts[tower.id] = (towerCounts[tower.id] || 0) + 1;
     }
   }
+  const missingTowerTypes = towerDefs
+    .map((tower) => tower.id)
+    .filter((towerId) => !usedTowerTypes.has(towerId));
+  const forceTowerDiversity = missingTowerTypes.length > 0;
 
   let best = null;
   for (let slotIndex = 0; slotIndex < state.aiTowers.length; slotIndex += 1) {
@@ -1520,11 +1928,19 @@ function pickBestAITowerPlacement(mana, defenseBudget, playerDefenseScore, waveN
       if (candidate.cost > mana || candidate.cost > defenseBudget) {
         continue;
       }
-      if (existing && existing.id === candidate.id) {
+      if (forceTowerDiversity && !missingTowerTypes.includes(candidate.id)) {
+        continue;
+      }
+      const canUpgrade = !!existing
+        && existing.id === candidate.id
+        && existing.level < getTowerMaxLevel(candidate.id);
+      const nextLevel = canUpgrade ? existing.level + 1 : 1;
+      if (existing && existing.id === candidate.id && !canUpgrade) {
         continue;
       }
 
-      const candidatePower = towerPowerScore(candidate);
+      const candidateTower = createTowerInstance(candidate, "ai", nextLevel);
+      const candidatePower = towerPowerScore(candidateTower);
       const improvement = existing ? candidatePower - existingPower : candidatePower + 0.9;
       if (existing && improvement < 0.1) {
         continue;
@@ -1534,10 +1950,12 @@ function pickBestAITowerPlacement(mana, defenseBudget, playerDefenseScore, waveN
       const expensiveEarlyPenalty = waveNumber <= 2 && candidate.cost >= 9 ? 1.3 : 0;
       const counterBoost = playerDefenseScore > 9 ? candidate.range * 2.1 : candidate.damage * 0.2;
       const emptyBonus = existing ? 0 : 0.8;
-      const value = improvement + counterBoost + emptyBonus - diversityPenalty - candidate.cost * 0.09 - expensiveEarlyPenalty + Math.random() * 0.08;
+      const diversityPriority = forceTowerDiversity ? 1.35 : 0;
+      const upgradeBias = canUpgrade ? 0.65 : 0;
+      const value = improvement + counterBoost + emptyBonus + diversityPriority + upgradeBias - diversityPenalty - candidate.cost * 0.09 - expensiveEarlyPenalty + Math.random() * 0.08;
 
       if (!best || value > best.value) {
-        best = { slotIndex, tower: candidate, value };
+        best = { slotIndex, tower: candidate, value, nextLevel };
       }
     }
   }
@@ -1616,16 +2034,17 @@ function prepareAIMoves() {
 
   const playerDefenseScore = totalDefenseScore(state.playerTowers);
   const minAttackerCost = Math.min(...attackerDefs.map((item) => item.cost));
-  const forcedWaveAttackerId = state.waveNumber === 1 ? "wisp" : state.waveNumber === 2 ? "tank" : null;
-  const forcedWaveAttacker = forcedWaveAttackerId
-    ? attackerDefs.find((item) => item.id === forcedWaveAttackerId) || null
-    : null;
-  const forcedReserve = forcedWaveAttacker ? forcedWaveAttacker.cost : 0;
-  const reserveTarget = clamp(8 + state.waveNumber * 2, 10, 38);
-  let defenseBudget = Math.max(0, state.aiMana - reserveTarget - forcedReserve);
+  const isSpikeSaveRound = state.waveNumber % 3 === 0 || (state.waveNumber >= 6 && playerDefenseScore > 9);
+  const reserveTarget = isSpikeSaveRound
+    ? clamp(14 + state.waveNumber * 2.8, 18, 54)
+    : clamp(7 + state.waveNumber * 1.5, 9, 30);
+  const defenseRatio = isSpikeSaveRound ? 0.14 : 0.22;
+  const attackBiasFloor = Math.max(0, state.aiMana - reserveTarget);
+  let defenseBudget = Math.min(Math.max(0, state.aiMana * defenseRatio), attackBiasFloor);
   let placementCount = 0;
+  const maxPlacements = isSpikeSaveRound ? 1 : 2;
 
-  while (placementCount < 3) {
+  while (placementCount < maxPlacements) {
     const bestPlacement = pickBestAITowerPlacement(state.aiMana, defenseBudget, playerDefenseScore, state.waveNumber);
     if (!bestPlacement) {
       break;
@@ -1635,19 +2054,15 @@ function prepareAIMoves() {
     }
     state.aiMana -= bestPlacement.tower.cost;
     defenseBudget -= bestPlacement.tower.cost;
-    state.aiTowers[bestPlacement.slotIndex] = createTowerInstance(bestPlacement.tower, "ai");
+    state.aiTowers[bestPlacement.slotIndex] = createTowerInstance(bestPlacement.tower, "ai", bestPlacement.nextLevel || 1);
     markMatchUsage("towers", bestPlacement.tower.id, "ai");
     placementCount += 1;
   }
 
-  const postDefenseReserve = clamp(reserveTarget * 0.7, 6, 28);
+  const postDefenseReserve = isSpikeSaveRound
+    ? reserveTarget
+    : clamp(reserveTarget * 0.55, 5, 22);
   let sentCount = 0;
-  if (forcedWaveAttacker && state.aiMana >= forcedWaveAttacker.cost) {
-    state.aiMana -= forcedWaveAttacker.cost;
-    state.aiQueue.push(forcedWaveAttacker.id);
-    markMatchUsage("attackers", forcedWaveAttacker.id, "ai");
-    sentCount = 1;
-  }
   let attackBudget = Math.max(0, state.aiMana - postDefenseReserve);
   const pattern = chooseAIBatchPattern(playerDefenseScore, state.waveNumber);
 
@@ -1689,7 +2104,17 @@ function attackerPosition(unit) {
   };
 }
 
-function targetForTower(towerPos, incomingAttackers, range) {
+function isUnitStatusActive(unit, statusType) {
+  if (statusType === "slowed") {
+    return unit.slowTimer > 0;
+  }
+  if (statusType === "poisoned") {
+    return unit.poisonTimer > 0;
+  }
+  return false;
+}
+
+function getTowerCandidates(towerPos, incomingAttackers, range, coneHalfAngleCos) {
   const isPlayerTower = towerPos.y > 0.5;
   const dirX = 0;
   const dirY = isPlayerTower ? -1 : 1;
@@ -1702,34 +2127,77 @@ function targetForTower(towerPos, incomingAttackers, range) {
     const dist = Math.hypot(vx, vy);
     if (dist <= range) {
       if (dist === 0) {
-        candidates.push({ unit, dist });
+        candidates.push({ unit, dist, progress: unit.progress });
         continue;
       }
       const cosAngle = (vx * dirX + vy * dirY) / dist;
-      if (cosAngle >= TOWER_CONE_HALF_ANGLE_COS) {
-        candidates.push({ unit, dist });
+      if (cosAngle >= coneHalfAngleCos) {
+        candidates.push({ unit, dist, progress: unit.progress });
       }
     }
   }
+  return candidates;
+}
 
+function chooseTargetByRule(candidates, towerId) {
   if (candidates.length === 0) {
     return null;
   }
-
+  if (towerId === "yellow" || towerId === "green") {
+    const statusType = towerId === "yellow" ? "slowed" : "poisoned";
+    const freshTargets = candidates.filter((item) => !isUnitStatusActive(item.unit, statusType));
+    const priorityPool = freshTargets.length > 0 ? freshTargets : candidates;
+    priorityPool.sort((a, b) => {
+      if (a.dist !== b.dist) {
+        return a.dist - b.dist;
+      }
+      if (b.progress !== a.progress) {
+        return b.progress - a.progress;
+      }
+      return a.unit.id - b.unit.id;
+    });
+    return priorityPool[0].unit;
+  }
   candidates.sort((a, b) => {
-    if (b.unit.progress !== a.unit.progress) {
-      return b.unit.progress - a.unit.progress;
+    if (b.progress !== a.progress) {
+      return b.progress - a.progress;
     }
     if (a.dist !== b.dist) {
       return a.dist - b.dist;
     }
     return a.unit.id - b.unit.id;
   });
-
   return candidates[0].unit;
 }
 
-function spawnProjectile(fromPos, target, damage, color, towerId, owner) {
+function targetsForTower(tower, towerPos, incomingAttackers) {
+  const candidates = getTowerCandidates(
+    towerPos,
+    incomingAttackers,
+    tower.range,
+    tower.coneHalfAngleCos
+  );
+  if (candidates.length === 0) {
+    return [];
+  }
+  const selected = [];
+  const maxTargets = Math.max(1, tower.maxTargets || 1);
+  let candidatePool = candidates.slice();
+  for (let i = 0; i < maxTargets; i += 1) {
+    const chosen = chooseTargetByRule(candidatePool, tower.id);
+    if (!chosen) {
+      break;
+    }
+    selected.push(chosen);
+    candidatePool = candidatePool.filter((item) => item.unit.id !== chosen.id);
+    if (candidatePool.length === 0) {
+      break;
+    }
+  }
+  return selected;
+}
+
+function spawnProjectile(fromPos, target, damage, color, towerId, owner, speedOverride = null, slowDurationOverride = null, poisonDotMultiplierOverride = null, shrapnelDamageMultiplierOverride = null) {
   const projectileId = state.nextProjectileId;
   state.nextProjectileId += 1;
   state.projectiles.push({
@@ -1741,13 +2209,154 @@ function spawnProjectile(fromPos, target, damage, color, towerId, owner) {
     targetId: target.id,
     targetOwner: target.owner,
     damage,
-    speed: 1.35,
+    speed: speedOverride || 1.35,
+    slowDuration: Number.isFinite(slowDurationOverride) ? slowDurationOverride : null,
+    poisonDotMultiplier: Number.isFinite(poisonDotMultiplierOverride) ? poisonDotMultiplierOverride : 1,
+    shrapnelDamageMultiplier: Number.isFinite(shrapnelDamageMultiplierOverride) ? shrapnelDamageMultiplierOverride : 1,
     color,
     towerId,
     owner,
     age: 0,
     trail: [{ x: fromPos.x, y: fromPos.y }]
   });
+}
+
+function applyProjectileDamage(target, damage, towerId, owner, allowAoe = true, slowDurationForHit = null, poisonDotMultiplierForHit = 1, shrapnelDamageMultiplierForHit = 1) {
+  if (!target || target.isDefeated || damage <= 0) {
+    return;
+  }
+  target.hp -= damage;
+  if (towerId === "yellow") {
+    const appliedSlow = Number.isFinite(slowDurationForHit) ? slowDurationForHit : 1.2;
+    target.slowTimer = Math.max(target.slowTimer, appliedSlow);
+  }
+  if (towerId === "green") {
+    target.poisonTimer = 3;
+    target.poisonTicksRemaining = 3;
+    target.poisonTickInterval = 1;
+    target.poisonTickTimer = 1;
+    const appliedPoisonDotMultiplier = Number.isFinite(poisonDotMultiplierForHit) ? poisonDotMultiplierForHit : 1;
+    target.poisonBaseDamage = damage * appliedPoisonDotMultiplier;
+    target.poisonSourceOwner = owner;
+  }
+  if (towerId === "red" && allowAoe) {
+    const appliedShrapnelMultiplier = Number.isFinite(shrapnelDamageMultiplierForHit) ? shrapnelDamageMultiplierForHit : 1;
+    spawnRedAoeBursts(target, damage * 0.33 * appliedShrapnelMultiplier, target.id);
+  }
+  if (target.hp <= 0 && !target.isDefeated) {
+    target.isDefeated = true;
+    grantRoundManaBonus(owner, 1);
+    if (getTowerDef(towerId)) {
+      recordTowerKill(towerId, owner);
+    }
+  }
+}
+
+function getTankWeaponStats() {
+  const violetDef = getTowerDef("violet");
+  const range = (violetDef?.range || 0.416) * 0.5;
+  const damage = (violetDef?.damage || 2) * 0.5;
+  const coneHalfAngleRad = (180 * Math.PI) / 360;
+  return {
+    range,
+    damage,
+    fireRate: 1.1,
+    coneHalfAngleCos: Math.cos(coneHalfAngleRad)
+  };
+}
+
+function getTankTarget(tankUnit, enemyUnits, stats) {
+  const origin = attackerPosition(tankUnit);
+  const facingUp = tankUnit.owner === "player";
+  const dirX = 0;
+  const dirY = facingUp ? -1 : 1;
+  const candidates = [];
+
+  for (const enemy of enemyUnits) {
+    if (enemy.hp <= 0 || enemy.isDefeated || enemy.progress >= 1) {
+      continue;
+    }
+    const pos = attackerPosition(enemy);
+    const vx = pos.x - origin.x;
+    const vy = pos.y - origin.y;
+    const dist = Math.hypot(vx, vy);
+    if (dist > stats.range) {
+      continue;
+    }
+    if (dist === 0) {
+      candidates.push({ unit: enemy, dist });
+      continue;
+    }
+    const cosAngle = (vx * dirX + vy * dirY) / dist;
+    if (cosAngle >= stats.coneHalfAngleCos) {
+      candidates.push({ unit: enemy, dist });
+    }
+  }
+
+  if (candidates.length === 0) {
+    return null;
+  }
+  candidates.sort((a, b) => {
+    if (a.dist !== b.dist) {
+      return a.dist - b.dist;
+    }
+    return b.unit.progress - a.unit.progress;
+  });
+  return candidates[0].unit;
+}
+
+function updateTankCreepFire(dt) {
+  const tankStats = getTankWeaponStats();
+  const shootFrom = (ownerUnits, enemyUnits, ownerName) => {
+    for (const unit of ownerUnits) {
+      if (unit.defId !== "tank" || unit.hp <= 0 || unit.isDefeated || unit.progress >= 1) {
+        continue;
+      }
+      unit.shootCooldown -= dt;
+      if (unit.shootCooldown > 0) {
+        continue;
+      }
+      const target = getTankTarget(unit, enemyUnits, tankStats);
+      if (!target) {
+        continue;
+      }
+      spawnProjectile(attackerPosition(unit), target, tankStats.damage, "#14532d", "tank", ownerName, 1.15);
+      unit.shootCooldown = tankStats.fireRate;
+    }
+  };
+  shootFrom(state.attackersPlayer, state.attackersAI, "player");
+  shootFrom(state.attackersAI, state.attackersPlayer, "ai");
+}
+
+function spawnRedAoeBursts(centerUnit, splashDamage, ignoreUnitId) {
+  const origin = attackerPosition(centerUnit);
+  const groupId = state.nextFireBurstId;
+  state.nextFireBurstId += 1;
+  const directions = 6;
+  const particlesPerDirection = 8;
+  for (let d = 0; d < directions; d += 1) {
+    const baseAngle = (Math.PI * 2 * d) / directions;
+    for (let i = 0; i < particlesPerDirection; i += 1) {
+      const angle = baseAngle + (Math.random() - 0.5) * 0.32;
+      const distancePx = 200 + Math.random() * 100;
+      const normDistance = distancePx / Math.max(canvas.width, 1);
+      const speed = 1.35 + Math.random() * 0.55;
+      const life = normDistance / speed;
+      state.fireBursts.push({
+        x: origin.x,
+        y: origin.y,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed,
+        life,
+        maxLife: life,
+        groupId,
+        splashDamage,
+        sourceOwner: centerUnit.owner,
+        ignoreUnitId,
+        hitIds: []
+      });
+    }
+  }
 }
 
 function ensureAudioContext() {
@@ -1932,6 +2541,48 @@ function playTowerFireSfx(towerId) {
   }
 }
 
+function playBonusManaSfx(source = "kill") {
+  const ctxAudio = ensureAudioContext();
+  if (!ctxAudio) {
+    return;
+  }
+  const now = ctxAudio.currentTime;
+
+  if (source === "score") {
+    const osc = ctxAudio.createOscillator();
+    const gain = ctxAudio.createGain();
+    osc.type = "triangle";
+    osc.frequency.setValueAtTime(520, now);
+    osc.frequency.linearRampToValueAtTime(760, now + 0.07);
+    gain.gain.setValueAtTime(0.0001, now);
+    gain.gain.exponentialRampToValueAtTime(0.045, now + 0.01);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.12);
+    osc.connect(gain);
+    gain.connect(ctxAudio.destination);
+    osc.start(now);
+    osc.stop(now + 0.13);
+    return;
+  }
+
+  const osc = ctxAudio.createOscillator();
+  const filter = ctxAudio.createBiquadFilter();
+  const gain = ctxAudio.createGain();
+  osc.type = "square";
+  osc.frequency.setValueAtTime(240, now);
+  osc.frequency.exponentialRampToValueAtTime(130, now + 0.055);
+  filter.type = "bandpass";
+  filter.frequency.setValueAtTime(320, now);
+  filter.Q.value = 0.9;
+  gain.gain.setValueAtTime(0.0001, now);
+  gain.gain.exponentialRampToValueAtTime(0.05, now + 0.006);
+  gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.09);
+  osc.connect(filter);
+  filter.connect(gain);
+  gain.connect(ctxAudio.destination);
+  osc.start(now);
+  osc.stop(now + 0.095);
+}
+
 function spawnTowerFlash(pos, color) {
   state.towerFlashes.push({
     x: pos.x,
@@ -1988,11 +2639,24 @@ function updateTowerFire(dt) {
     if (tower.cooldown > 0) {
       continue;
     }
-    const target = targetForTower(towerPosPlayer[i], state.attackersAI, tower.range);
-    if (!target) {
+    const targets = targetsForTower(tower, towerPosPlayer[i], state.attackersAI);
+    if (targets.length === 0) {
       continue;
     }
-    spawnProjectile(towerPosPlayer[i], target, tower.damage, tower.color, tower.id, "player");
+    for (const target of targets) {
+      spawnProjectile(
+        towerPosPlayer[i],
+        target,
+        tower.damage,
+        tower.color,
+        tower.id,
+        "player",
+        null,
+        tower.slowDuration,
+        tower.poisonDotMultiplier,
+        tower.shrapnelDamageMultiplier
+      );
+    }
     spawnTowerFlash(towerPosPlayer[i], tower.color);
     if ((tower.id === "violet" || tower.id === "yellow" || tower.id === "red" || tower.id === "green" || tower.id === "orange") && state.soundCooldowns[tower.id] <= 0) {
       playTowerFireSfx(tower.id);
@@ -2010,11 +2674,24 @@ function updateTowerFire(dt) {
     if (tower.cooldown > 0) {
       continue;
     }
-    const target = targetForTower(towerPosAI[i], state.attackersPlayer, tower.range);
-    if (!target) {
+    const targets = targetsForTower(tower, towerPosAI[i], state.attackersPlayer);
+    if (targets.length === 0) {
       continue;
     }
-    spawnProjectile(towerPosAI[i], target, tower.damage, tower.color, tower.id, "ai");
+    for (const target of targets) {
+      spawnProjectile(
+        towerPosAI[i],
+        target,
+        tower.damage,
+        tower.color,
+        tower.id,
+        "ai",
+        null,
+        tower.slowDuration,
+        tower.poisonDotMultiplier,
+        tower.shrapnelDamageMultiplier
+      );
+    }
     spawnTowerFlash(towerPosAI[i], tower.color);
     if ((tower.id === "violet" || tower.id === "yellow" || tower.id === "red" || tower.id === "green" || tower.id === "orange") && state.soundCooldowns[tower.id] <= 0) {
       playTowerFireSfx(tower.id);
@@ -2048,13 +2725,18 @@ function updateProjectiles(dt) {
     projectile.prevY = projectile.y;
 
     if (dist <= 0.012) {
-      target.hp -= projectile.damage;
+      applyProjectileDamage(
+        target,
+        projectile.damage,
+        projectile.towerId,
+        projectile.owner,
+        true,
+        projectile.slowDuration,
+        projectile.poisonDotMultiplier,
+        projectile.shrapnelDamageMultiplier
+      );
       if (projectile.towerId === "orange") {
         spawnProjectileImpactParticles(projectile.x, projectile.y, "#fdba74", 8);
-      }
-      if (target.hp <= 0 && !target.isDefeated) {
-        target.isDefeated = true;
-        recordTowerKill(projectile.towerId, projectile.owner);
       }
       continue;
     }
@@ -2071,6 +2753,43 @@ function updateProjectiles(dt) {
   }
 
   state.projectiles = stillActive;
+}
+
+function updateFireBursts(dt) {
+  const active = [];
+  for (const burst of state.fireBursts) {
+    burst.life -= dt;
+    if (burst.life <= 0) {
+      continue;
+    }
+    burst.x += burst.vx * dt;
+    burst.y += burst.vy * dt;
+    if (burst.x < 0.02 || burst.x > 0.98 || burst.y < 0.02 || burst.y > 0.98) {
+      continue;
+    }
+    const enemyList = burst.sourceOwner === "player" ? state.attackersAI : state.attackersPlayer;
+    let collided = false;
+    for (const unit of enemyList) {
+      if (unit.isDefeated || burst.hitIds.includes(unit.id)) {
+        continue;
+      }
+      if (unit.id === burst.ignoreUnitId) {
+        continue;
+      }
+      const pos = attackerPosition(unit);
+      const dx = pos.x - burst.x;
+      const dy = pos.y - burst.y;
+      if (Math.hypot(dx, dy) <= 0.02) {
+        burst.hitIds.push(unit.id);
+        applyProjectileDamage(unit, burst.splashDamage, "red", burst.sourceOwner, false);
+        collided = true;
+      }
+    }
+    if (!collided) {
+      active.push(burst);
+    }
+  }
+  state.fireBursts = active;
 }
 
 function updateTowerFlashes(dt) {
@@ -2105,6 +2824,23 @@ function updateAttackers(dt) {
   let aiScored = 0;
 
   for (const unit of state.attackersPlayer) {
+    unit.slowTimer = Math.max(0, unit.slowTimer - dt);
+    unit.speed = unit.slowTimer > 0 ? unit.baseSpeed * 0.7 : unit.baseSpeed;
+    unit.poisonTimer = Math.max(0, unit.poisonTimer - dt);
+    if (unit.poisonTicksRemaining > 0) {
+      unit.poisonTickTimer -= dt;
+      if (unit.poisonTickTimer <= 0) {
+        const step = 4 - unit.poisonTicksRemaining;
+        const ratios = [0.3, 0.2, 0.1];
+        const dotDamage = unit.poisonBaseDamage * ratios[Math.min(step, ratios.length - 1)];
+        unit.hp -= dotDamage;
+        unit.poisonTicksRemaining -= 1;
+        unit.poisonTickTimer += unit.poisonTickInterval;
+      }
+    }
+    if (unit.hp <= 0) {
+      continue;
+    }
     unit.progress += unit.speed * dt;
     if (unit.progress >= 1) {
       playerScored += 1;
@@ -2112,6 +2848,23 @@ function updateAttackers(dt) {
     }
   }
   for (const unit of state.attackersAI) {
+    unit.slowTimer = Math.max(0, unit.slowTimer - dt);
+    unit.speed = unit.slowTimer > 0 ? unit.baseSpeed * 0.7 : unit.baseSpeed;
+    unit.poisonTimer = Math.max(0, unit.poisonTimer - dt);
+    if (unit.poisonTicksRemaining > 0) {
+      unit.poisonTickTimer -= dt;
+      if (unit.poisonTickTimer <= 0) {
+        const step = 4 - unit.poisonTicksRemaining;
+        const ratios = [0.3, 0.2, 0.1];
+        const dotDamage = unit.poisonBaseDamage * ratios[Math.min(step, ratios.length - 1)];
+        unit.hp -= dotDamage;
+        unit.poisonTicksRemaining -= 1;
+        unit.poisonTickTimer += unit.poisonTickInterval;
+      }
+    }
+    if (unit.hp <= 0) {
+      continue;
+    }
     unit.progress += unit.speed * dt;
     if (unit.progress >= 1) {
       aiScored += 1;
@@ -2120,11 +2873,25 @@ function updateAttackers(dt) {
   }
 
   for (const unit of state.attackersPlayer) {
+    if (unit.hp <= 0 && !unit.isDefeated) {
+      unit.isDefeated = true;
+      if (unit.poisonSourceOwner) {
+        grantRoundManaBonus(unit.poisonSourceOwner, 1);
+        recordTowerKill("green", unit.poisonSourceOwner);
+      }
+    }
     if (unit.hp <= 0) {
       spawnDeathParticles(unit);
     }
   }
   for (const unit of state.attackersAI) {
+    if (unit.hp <= 0 && !unit.isDefeated) {
+      unit.isDefeated = true;
+      if (unit.poisonSourceOwner) {
+        grantRoundManaBonus(unit.poisonSourceOwner, 1);
+        recordTowerKill("green", unit.poisonSourceOwner);
+      }
+    }
     if (unit.hp <= 0) {
       spawnDeathParticles(unit);
     }
@@ -2135,6 +2902,12 @@ function updateAttackers(dt) {
 
   state.playerScore += playerScored;
   state.aiScore += aiScored;
+  if (playerScored > 0) {
+    grantRoundManaBonus("player", playerScored, "score");
+  }
+  if (aiScored > 0) {
+    grantRoundManaBonus("ai", aiScored, "score");
+  }
 }
 
 function updateGame(dt) {
@@ -2161,6 +2934,11 @@ function updateGame(dt) {
     return;
   }
 
+  // Multiplayer: waiting for opponent to submit prep data — freeze the game loop
+  if (state.phase === "waiting") {
+    return;
+  }
+
   if (state.phase === "prep") {
     if (!state.aiDraftDone) {
       prepareAIMoves();
@@ -2174,7 +2952,9 @@ function updateGame(dt) {
   } else {
     updateAttackers(dt);
     updateTowerFire(dt);
+    updateTankCreepFire(dt);
     updateProjectiles(dt);
+    updateFireBursts(dt);
     updateTowerFlashes(dt);
     updateDeathParticles(dt);
 
@@ -2182,6 +2962,7 @@ function updateGame(dt) {
       state.attackersPlayer.length === 0 &&
       state.attackersAI.length === 0 &&
       state.projectiles.length === 0 &&
+      state.fireBursts.length === 0 &&
       state.deathParticles.length === 0
     ) {
       onBattleFinished();
@@ -2225,8 +3006,9 @@ function drawTowerRanges() {
     const range = tower.range * canvas.width;
     const facingUp = pos.y > 0.5;
     const baseAngle = facingUp ? -Math.PI / 2 : Math.PI / 2;
-    const startAngle = baseAngle - TOWER_CONE_HALF_ANGLE_RAD;
-    const endAngle = baseAngle + TOWER_CONE_HALF_ANGLE_RAD;
+    const halfAngle = tower.coneHalfAngleRad || ((BASE_TOWER_CONE_DEGREES * Math.PI) / 360);
+    const startAngle = baseAngle - halfAngle;
+    const endAngle = baseAngle + halfAngle;
 
     ctx.fillStyle = `${tower.color}33`;
     ctx.beginPath();
@@ -2295,13 +3077,91 @@ function drawAttackers(units) {
     ctx.fillRect(x - 10, y - 14, 20, 3);
     ctx.fillStyle = "#22c55e";
     ctx.fillRect(x - 10, y - 14, 20 * hpRatio, 3);
+
+    if (unit.poisonTimer > 0) {
+      ctx.fillStyle = "rgba(74, 222, 128, 0.38)";
+      ctx.beginPath();
+      ctx.arc(x, y, 11, 0, Math.PI * 2);
+      ctx.fill();
+      for (let i = 0; i < 5; i += 1) {
+        const a = state.animationClock * 5 + unit.id * 0.7 + i;
+        ctx.fillStyle = "rgba(134, 239, 172, 0.7)";
+        ctx.fillRect(
+          x + Math.cos(a) * (4 + i * 0.7),
+          y + Math.sin(a * 1.3) * (4 + i * 0.6),
+          2,
+          2
+        );
+      }
+    }
   }
+}
+
+function drawTankCreepRanges() {
+  const stats = getTankWeaponStats();
+  const halfAngle = (180 * Math.PI) / 360;
+  const drawForUnits = (units, facingUp) => {
+    const baseAngle = facingUp ? -Math.PI / 2 : Math.PI / 2;
+    const startAngle = baseAngle - halfAngle;
+    const endAngle = baseAngle + halfAngle;
+    for (const unit of units) {
+      if (unit.defId !== "tank" || unit.hp <= 0 || unit.isDefeated || unit.progress >= 1) {
+        continue;
+      }
+      const pos = attackerPosition(unit);
+      const x = canvas.width * pos.x;
+      const y = canvas.height * pos.y;
+      const rangePx = stats.range * canvas.width;
+      ctx.fillStyle = "rgba(20, 83, 45, 0.16)";
+      ctx.beginPath();
+      ctx.moveTo(x, y);
+      ctx.arc(x, y, rangePx, startAngle, endAngle);
+      ctx.closePath();
+      ctx.fill();
+    }
+  };
+  drawForUnits(state.attackersPlayer, true);
+  drawForUnits(state.attackersAI, false);
 }
 
 function drawProjectiles() {
   for (const projectile of state.projectiles) {
     const x = canvas.width * projectile.x;
     const y = canvas.height * projectile.y;
+    if (projectile.towerId === "violet") {
+      const trail = projectile.trail;
+      const pNow = trail[trail.length - 1] || { x: projectile.x, y: projectile.y };
+      const pPrev = trail[Math.max(0, trail.length - 4)] || { x: projectile.prevX, y: projectile.prevY };
+      const x0 = canvas.width * pPrev.x;
+      const y0 = canvas.height * pPrev.y;
+      const x1 = canvas.width * pNow.x;
+      const y1 = canvas.height * pNow.y;
+      const dx = x1 - x0;
+      const dy = y1 - y0;
+      const len = Math.hypot(dx, dy) || 1;
+      const ux = dx / len;
+      const uy = dy / len;
+      const streak = 18;
+      const backX = x1 - ux * streak;
+      const backY = y1 - uy * streak;
+
+      ctx.strokeStyle = "rgba(167, 139, 250, 0.8)";
+      ctx.lineWidth = 3.2;
+      ctx.lineCap = "round";
+      ctx.beginPath();
+      ctx.moveTo(backX, backY);
+      ctx.lineTo(x1, y1);
+      ctx.stroke();
+
+      ctx.strokeStyle = "rgba(233, 213, 255, 0.95)";
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(backX + ux * 3, backY + uy * 3);
+      ctx.lineTo(x1, y1);
+      ctx.stroke();
+      continue;
+    }
+
     if (projectile.towerId === "yellow") {
       const trail = projectile.trail;
       if (trail.length > 1) {
@@ -2420,10 +3280,34 @@ function drawProjectiles() {
       continue;
     }
 
+    if (projectile.towerId === "tank") {
+      ctx.fillStyle = "rgba(20, 83, 45, 0.45)";
+      ctx.beginPath();
+      ctx.arc(x, y, 3.4, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "#14532d";
+      ctx.beginPath();
+      ctx.arc(x, y, 2.2, 0, Math.PI * 2);
+      ctx.fill();
+      continue;
+    }
+
     ctx.fillStyle = projectile.color;
     ctx.beginPath();
     ctx.arc(x, y, 3.3, 0, Math.PI * 2);
     ctx.fill();
+  }
+}
+
+function drawFireBursts() {
+  for (const burst of state.fireBursts) {
+    const x = canvas.width * burst.x;
+    const y = canvas.height * burst.y;
+    const t = clamp(burst.life / burst.maxLife, 0, 1);
+    ctx.globalAlpha = 0.45 + t * 0.45;
+    ctx.fillStyle = t > 0.5 ? "#fb923c" : "#fca5a5";
+    ctx.fillRect(x - 1.25, y - 1.25, 2.5, 2.5);
+    ctx.globalAlpha = 1;
   }
 }
 
@@ -2478,9 +3362,11 @@ function drawRoundBanner() {
 function drawBoard() {
   drawLane();
   drawTowerRanges();
+  drawTankCreepRanges();
   drawAttackers(state.attackersPlayer);
   drawAttackers(state.attackersAI);
   drawProjectiles();
+  drawFireBursts();
   drawTowerFlashes();
   drawDeathParticles();
   drawRoundBanner();
@@ -2525,6 +3411,10 @@ shopStartBtnEl.addEventListener("click", () => {
   if (state.phase !== "shop") {
     return;
   }
+  if (multiplayerRole !== null && window.Lobby) {
+    window.Lobby.onShopStart();
+    return;
+  }
   beginRoundBanner();
 });
 
@@ -2547,7 +3437,7 @@ playMatchBtnEl.addEventListener("click", () => {
 });
 
 resumeMatchBtnEl.addEventListener("click", () => {
-  if (!state.hasActiveMatch || state.gameOver) {
+  if (!state.hasActiveMatch || state.gameOver || multiplayerRole !== null) {
     return;
   }
   state.paused = false;
@@ -2567,17 +3457,29 @@ recordsBackBtnEl.addEventListener("click", () => {
 
 progressBtnEl.addEventListener("click", () => {
   if (state.hasActiveMatch && !state.gameOver) {
-    state.paused = true;
-    saveMatchStateNow();
+    if (multiplayerRole !== null) {
+      window.Lobby && Lobby.endSession();
+      clearSavedMatchState();
+      state.hasActiveMatch = false;
+    } else {
+      state.paused = true;
+      saveMatchStateNow();
+    }
   }
   setScreen("records");
 });
 
 homeBtnEl.addEventListener("click", () => {
   if (state.hasActiveMatch && !state.gameOver) {
-    state.paused = true;
-    updateStatus("Match paused from the menu.");
-    saveMatchStateNow();
+    if (multiplayerRole !== null) {
+      window.Lobby && Lobby.endSession();
+      clearSavedMatchState();
+      state.hasActiveMatch = false;
+    } else {
+      state.paused = true;
+      updateStatus("Match paused from the menu.");
+      saveMatchStateNow();
+    }
   }
   setScreen("menu");
 });

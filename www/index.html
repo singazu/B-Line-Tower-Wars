@@ -17,13 +17,14 @@
     </section>
     <section class="screen menu-screen" id="menu-screen" aria-labelledby="menu-title">
       <div class="menu-hero">
-        <p class="eyebrow">Single-Player Lane Defense</p>
+        <p class="eyebrow">Lane Defense Strategy</p>
         <h1 id="menu-title">Line Tower Wars</h1>
         <p class="menu-copy">
           Build a lane, queue your wave, outscore the rival commander, and grow your match record over time.
         </p>
         <div class="menu-actions">
-          <button id="play-match-btn" type="button">Play Match</button>
+          <button id="play-match-btn" type="button">Play vs AI</button>
+          <button id="find-match-btn" type="button">Find Match</button>
           <button id="resume-match-btn" class="secondary hidden" type="button">Resume Match</button>
           <button id="open-records-btn" class="secondary" type="button">View Records</button>
         </div>
@@ -42,11 +43,11 @@
           </article>
           <article class="info-card">
             <h3>2. Send pressure</h3>
-            <p>Queue attackers into the next wave to score when they cross the lane before the AI stops them.</p>
+            <p>Queue attackers into the next wave to score when they cross the lane before the AI stops them. Each scoring creep also grants 1 bonus mana for your next round.</p>
           </article>
           <article class="info-card">
             <h3>3. Keep pressure up</h3>
-            <p>Rounds continue automatically with bonus mana, so stay active between battles and adapt your loadout quickly.</p>
+            <p>Rounds continue automatically with bonus mana. You also gain 1 bonus mana next round for every enemy creep you destroy, so offense and defense both fuel your economy.</p>
           </article>
         </div>
       </section>
@@ -135,12 +136,13 @@
           <strong id="player-score">0</strong>
         </div>
         <div class="hud-chip">
-          <span>AI</span>
+          <span id="opponent-label">AI</span>
           <strong id="ai-score">0</strong>
         </div>
         <div class="hud-chip">
           <span>Round</span>
           <strong id="wave-number">1</strong>
+          <span class="connection-dot hidden" id="connection-dot" aria-hidden="true"></span>
         </div>
       </section>
 
@@ -168,6 +170,10 @@
                 <div>
                   <p class="shop-kicker">Between Rounds</p>
                   <h2 id="shop-title">Upgrade one card</h2>
+                </div>
+                <div class="mana-widget shop-mana-widget" aria-label="Player mana">
+                  <img class="mana-icon" src="assets/ui/mana-icon.png" alt="" />
+                  <span class="mana-value" id="shop-mana-value">9</span>
                 </div>
               </div>
               <p class="shop-copy">Choose one attacker or tower card to strengthen before the next round begins.</p>
@@ -244,5 +250,14 @@
   </main>
 
   <script src="script.js"></script>
+
+  <!-- Firebase compat SDK (v10) — required for multiplayer -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
+
+  <!-- Multiplayer layer — must load after Firebase SDK and after script.js -->
+  <script src="multiplayer.js"></script>
+  <script src="lobby.js"></script>
 </body>
 </html>
