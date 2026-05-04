@@ -426,8 +426,8 @@ select {
 }
 
 .tower-slot {
-  min-width: 3.7rem;
-  min-height: 3.55rem;
+  width: 3.7rem;
+  height: 3.55rem;
   border-radius: 0.7rem;
   border: 1px solid #2b4f6f;
   background: var(--slot-empty);
@@ -439,7 +439,8 @@ select {
   pointer-events: auto;
   position: absolute;
   transform: translate(-50%, -50%);
-  overflow: hidden;
+  overflow: visible;
+  z-index: 3;
 }
 
 .tower-slot.player {
@@ -463,24 +464,28 @@ select {
 }
 
 .slot-tower {
-  display: grid;
-  justify-items: center;
-  align-content: end;
+  display: block;
   width: 100%;
   height: 100%;
-  padding-bottom: 0.06rem;
+  position: relative;
+  z-index: 5;
 }
 
 .tower-icon-slot {
-  width: 3.05rem;
-  height: 3.05rem;
+  --tower-scale: 1;
+  width: 96px;
+  height: 96px;
   image-rendering: pixelated;
   display: block;
-  transform-origin: center bottom;
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%) scale(var(--tower-scale));
+  transform-origin: center center;
 }
 
 .tower-icon-slot.level-2 {
-  transform: scale(1.2);
+  --tower-scale: 1.2;
 }
 
 .timer-widget {
@@ -536,8 +541,8 @@ select {
   right: 0.55rem;
   top: 50%;
   transform: translateY(-50%);
-  width: 3.5rem;
-  height: 3.5rem;
+  width: 64px;
+  height: 64px;
   z-index: 4;
   pointer-events: none;
 }
@@ -787,30 +792,33 @@ select {
 }
 
 .dock-header {
-  display: flex;
-  align-items: baseline;
-  gap: 0.4rem;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: end;
+  column-gap: 0.6rem;
+  row-gap: 0.15rem;
   margin-bottom: 0.55rem;
 }
 
 .dock-label-image {
   display: block;
-  height: 1.15rem;
+  height: 2.3rem;
   width: auto;
   image-rendering: auto;
+  max-width: 100%;
 }
 
 .dock-label-towers {
-  max-width: 7rem;
+  max-width: 14rem;
 }
 
 .dock-label-attackers {
-  max-width: 8.3rem;
+  max-width: 16.6rem;
 }
 
 .dock-subtitle {
-  margin: 0.28rem 0 0;
+  grid-column: 2;
+  margin: 0;
   font-size: 0.9rem;
   color: #111827;
   font-weight: 700;
@@ -829,9 +837,6 @@ select {
   border: 1px solid #7c8aa4;
   border-radius: 0.75rem;
   background-color: rgba(255, 255, 255, 0.84);
-  background-image: url("assets/ui/tower_and_creep_selection_frame.png");
-  background-size: cover;
-  background-position: center;
   padding: 0.14rem;
   cursor: grab;
   user-select: none;
@@ -865,6 +870,16 @@ select {
   object-fit: contain;
   image-rendering: pixelated;
   pointer-events: none;
+}
+
+.attacker-icon-card {
+  width: 84px;
+  height: 84px;
+}
+
+.tower-icon-card {
+  width: 96px;
+  height: 96px;
 }
 
 .attacker-icon-frame {
@@ -1078,8 +1093,12 @@ button:disabled {
     margin-bottom: 0.35rem;
   }
 
-  .dock-header p {
-    display: inline;
+  .dock-label-image {
+    height: 1.8rem;
+  }
+
+  .dock-subtitle {
+    font-size: 0.8rem;
   }
 
   .tower-panel,

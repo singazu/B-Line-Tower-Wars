@@ -3037,12 +3037,12 @@ function drawAttackers(units) {
     const pos = attackerPosition(unit);
     const x = canvas.width * pos.x;
     const y = canvas.height * pos.y;
+    const spriteSize = 42;
 
     const spriteCfg = attackerSpriteConfig[unit.defId];
     const spriteImg = attackerSprites[unit.defId];
     if (spriteCfg && spriteImg && spriteImg.complete) {
       const frame = Math.floor(state.animationClock * spriteCfg.fps) % spriteCfg.frames;
-      const spriteSize = 24;
       const shouldInvertForAI = unit.owner === "ai" && (unit.defId === "wisp" || unit.defId === "tank");
       if (shouldInvertForAI) {
         ctx.save();
@@ -3081,10 +3081,11 @@ function drawAttackers(units) {
     }
 
     const hpRatio = clamp(unit.hp / unit.maxHp, 0, 1);
+    const hpBarY = y - (spriteSize / 2) - 6;
     ctx.fillStyle = "#111827";
-    ctx.fillRect(x - 10, y - 14, 20, 3);
+    ctx.fillRect(x - 10, hpBarY, 20, 3);
     ctx.fillStyle = "#22c55e";
-    ctx.fillRect(x - 10, y - 14, 20 * hpRatio, 3);
+    ctx.fillRect(x - 10, hpBarY, 20 * hpRatio, 3);
 
     if (unit.poisonTimer > 0) {
       ctx.fillStyle = "rgba(74, 222, 128, 0.38)";
