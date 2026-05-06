@@ -1,7 +1,7 @@
 # Agent Guide: Brian Line Tower Wars
 
 ## Mission
-Build a mobile-first lane-defense prototype where:
+Build a mobile-first lane-defense Production ready game where:
 - The player drags towers into 5 player slots during Prep phase.
 - The player queues attackers into the battlefield.
 - The AI controls mirrored enemy slots and sends attackers.

@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(node run.js --games 100)",
+      "Bash(awk -F',' 'NR>1 {p[$2]++; t[$2\"_t\"]+=$4; a[$2\"_a\"]+=$5; sT[$2\"_sT\"]+=$6; sA[$2\"_sA\"]+=$7; k[$2\"_k\"]+=$8; w[$2\"_w\"]+=$9} END {for \\(o in p\\) printf \"%s avg: tow=%.1f atk=%.1f shopT=%.1f shopA=%.1f kills=%.1f waste=%.1f total=%.1f\\\\n\", o, t[o\"_t\"]/p[o], a[o\"_a\"]/p[o], sT[o\"_sT\"]/p[o], sA[o\"_sA\"]/p[o], k[o\"_k\"]/p[o], w[o\"_w\"]/p[o], \\(t[o\"_t\"]+a[o\"_a\"]+sT[o\"_sT\"]+sA[o\"_sA\"]\\)/p[o]}' \"C:/Users/jphit/.codex/Projects/Tower Defense Codex/harness/out/economy.csv\")",
+      "Bash(awk *)",
+      "Bash(node run.js --games 1000)",
+      "Bash(node run.js --strategies default,rush,turtle --games-per-matchup 30)",
+      "Bash(node run.js --strategies all --games-per-matchup 30)",
+      "Bash(node run.js --strategies attackR1,attackR2,attackR3,attackR4,attackR5,attackR6,attackR7,attackR8,attackR9,attackR10 --games-per-matchup 50)",
+      "Bash(node run.js --strategies attackR4,attackR3,pulseR4_R10,pulseR3_R10,pulseR5_R10,pulseR4_R7_R10,pulseR3_R6_R10,pulseR3_R5_R7_R10,pulseR10,pulseR4 --games-per-matchup 50)",
+      "Bash(node run.js --strategies all --games-per-matchup 50 --out out-baseline)",
+      "Bash(rm -rf \"C:/Users/jphit/.codex/Projects/Tower Defense Codex/harness/out-baseline\")",
+      "Bash(node run.js --strategies all --games-per-matchup 50 --out out-baseline --matchup-only)",
+      "Bash(node run.js --strategies default,rush,turtle,monoViolet,monoYellow,monoRed,monoGreen,monoOrange,monoImp,monoRunner,monoBrute,monoWisp,monoTank --games-per-matchup 50 --out out-baseline --matchup-only)",
+      "Bash(node run.js --strategies default,rush,turtle,monoViolet,monoYellow,monoRed,monoGreen,monoOrange,monoImp,monoRunner,monoBrute,monoWisp,monoTank --games-per-matchup 50 --out out-proposal --matchup-only)"
+    ]
+  }
+}

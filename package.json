@@ -4,7 +4,10 @@
   "description": "A self-contained single-player lane defense strategy game for mobile.",
   "main": "script.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "sync:web": "node scripts/sync-web-to-www.cjs",
+    "cap:copy:android": "npm run sync:web && npx cap copy android",
+    "cap:sync:android": "npm run sync:web && npx cap sync android"
   },
   "repository": {
     "type": "git",
