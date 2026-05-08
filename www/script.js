@@ -21,12 +21,67 @@ const LOGICAL_CANVAS_WIDTH = 420;
 const LOGICAL_CANVAS_HEIGHT = 760;
 
 const towerDefs = [
-  { id: "violet", name: "Violet", cost: 2, damage: 2, range: 0.416, fireRate: 0.85, color: "#7c3aed", coneDegrees: 220, maxTargets: 1 },
-  { id: "yellow", name: "Yellow", cost: 5, damage: 2, range: 0.473, fireRate: 0.95, color: "#eab308", coneDegrees: BASE_TOWER_CONE_DEGREES * 1.1, maxTargets: 1 },
-  { id: "red", name: "Red", cost: 7, damage: 3, range: 0.434, fireRate: 1.05, color: "#dc2626", coneDegrees: BASE_TOWER_CONE_DEGREES, maxTargets: 1 },
+  { id: "violet", name: "Violet", cost: 2, damage: 2, range: 0.416, fireRate: 0.935, color: "#7c3aed", coneDegrees: 220, maxTargets: 1 },
+  { id: "yellow", name: "Yellow", cost: 5, damage: 2, range: 0.520, fireRate: 0.95, color: "#eab308", coneDegrees: BASE_TOWER_CONE_DEGREES * 1.1, maxTargets: 1 },
+  { id: "red", name: "Red", cost: 7, damage: 3.45, range: 0.434, fireRate: 1.05, color: "#dc2626", coneDegrees: BASE_TOWER_CONE_DEGREES, maxTargets: 1 },
   { id: "green", name: "Green", cost: 9, damage: 4, range: 0.635, fireRate: 1.15, color: "#22c55e", coneDegrees: BASE_TOWER_CONE_DEGREES * 0.9, maxTargets: 1 },
-  { id: "orange", name: "Orange", cost: 13, damage: 4, range: 0.492, fireRate: 1.25, color: "#f97316", coneDegrees: 200, maxTargets: 2 }
+  { id: "blue", name: "Blue", cost: 13, damage: 4, range: 0.492, fireRate: 1.375, color: "#2563eb", coneDegrees: 200, maxTargets: 2 }
 ];
+const LEGACY_TOWER_ID_ALIASES = {
+  orange: "blue"
+};
+
+function normalizeTowerId(towerId) {
+  return LEGACY_TOWER_ID_ALIASES[towerId] || towerId;
+}
+
+function readNumberWithLegacyId(source, id) {
+  if (!source || typeof source !== "object") {
+    return 0;
+  }
+  const direct = source[id];
+  if (Number.isFinite(direct)) {
+    return direct;
+  }
+  for (const [legacyId, currentId] of Object.entries(LEGACY_TOWER_ID_ALIASES)) {
+    if (currentId === id && Number.isFinite(source[legacyId])) {
+      return source[legacyId];
+    }
+  }
+  return 0;
+}
+
+function readBooleanWithLegacyId(source, id) {
+  if (!source || typeof source !== "object") {
+    return false;
+  }
+  if (typeof source[id] === "boolean") {
+    return source[id];
+  }
+  for (const [legacyId, currentId] of Object.entries(LEGACY_TOWER_ID_ALIASES)) {
+    if (currentId === id && typeof source[legacyId] === "boolean") {
+      return source[legacyId];
+    }
+  }
+  return false;
+}
+
+function normalizeTowerInstance(tower) {
+  if (!tower || typeof tower !== "object") {
+    return tower;
+  }
+  const normalizedId = normalizeTowerId(tower.id);
+  if (normalizedId === tower.id) {
+    return tower;
+  }
+  const def = towerDefs.find((item) => item.id === normalizedId);
+  return {
+    ...tower,
+    id: normalizedId,
+    name: def?.name || tower.name,
+    color: def?.color || tower.color
+  };
+}
 const TOWER_LEVEL_RULES = {
   violet: {
     maxLevel: 2,
@@ -59,7 +114,7 @@ const TOWER_LEVEL_RULES = {
     iconScalePerLevel: 1.2,
     poisonDotPerLevel: 1.5
   },
-  orange: {
+  blue: {
     maxLevel: 2,
     damagePerLevel: 1.2,
     rangePerLevel: 1.1,
@@ -70,65 +125,71 @@ const TOWER_LEVEL_RULES = {
     }
   }
 };
-const towerSpritePaths = {
-  violet: "assets/towers/violet.png",
-  yellow: "assets/towers/yellow.png",
-  red: "assets/towers/red.png",
-  green: "assets/towers/green.png",
-  orange: "assets/towers/orange.png"
-};
-
-const attackerDefs = [
-  { id: "imp", name: "Spider", cost: 2, hp: 20, speed: 0.1, color: "#1f2937" },
-  { id: "runner", name: "Runner", cost: 3, hp: 18, speed: 0.14, color: "#d97706" },
-  { id: "brute", name: "Eye", cost: 4, hp: 36, speed: 0.075, color: "#15803d" },
-  { id: "wisp", name: "Jellyfish", cost: 5, hp: 28, speed: 0.12, color: "#8b5cf6" },
-  { id: "tank", name: "Tank", cost: 6, hp: 52, speed: 0.062, color: "#0f766e" }
-];
-const attackerIconPaths = {
-  imp: "assets/creeps/spider-icon.png",
-  runner: "assets/creeps/runner-icon.png",
-  brute: "assets/creeps/eye-icon.png",
-  wisp: "assets/creeps/jellyfish-icon.png",
-  tank: "assets/creeps/tank-icon.png"
-};
-const attackerSpriteConfig = {
-  imp: {
-    path: "assets/creeps/imp-sprite-sheet.png",
-    frameWidth: 272,
-    frameHeight: 206,
-    frames: 4,
-    fps: 6
+const ART_PACKS = {
+  jonCarling: {
+    battlefield: "assets/arena/battlefield_background.png",
+    towers: {
+      violet: "assets/towers/violet.png",
+      yellow: "assets/towers/yellow.png",
+      red: "assets/towers/red.png",
+      green: "assets/towers/green.png",
+      blue: "assets/towers/blue.png"
+    },
+    attackerIcons: {
+      imp: "assets/creeps/spider-icon.png",
+      runner: "assets/creeps/runner-icon.png",
+      brute: "assets/creeps/eye-icon.png",
+      wisp: "assets/creeps/jellyfish-icon.png",
+      tank: "assets/creeps/tank-icon.png"
+    },
+    attackerSprites: {
+      imp: { path: "assets/creeps/imp-sprite-sheet.png", frameWidth: 272, frameHeight: 206, frames: 4, fps: 6 },
+      runner: { path: "assets/creeps/runner-sprite-sheet.png", frameWidth: 276, frameHeight: 286, frames: 4, fps: 6 },
+      brute: { path: "assets/creeps/brute-sprite-sheet.png", frameWidth: 270, frameHeight: 272, frames: 4, fps: 6 },
+      wisp: { path: "assets/creeps/wisp-sprite-sheet.png", frameWidth: 242, frameHeight: 260, frames: 4, fps: 6 },
+      tank: { path: "assets/creeps/tank-sprite-sheet.png", frameWidth: 270, frameHeight: 302, frames: 4, fps: 6 }
+    }
   },
-  runner: {
-    path: "assets/creeps/runner-sprite-sheet.png",
-    frameWidth: 276,
-    frameHeight: 286,
-    frames: 4,
-    fps: 6
-  },
-  brute: {
-    path: "assets/creeps/brute-sprite-sheet.png",
-    frameWidth: 270,
-    frameHeight: 272,
-    frames: 4,
-    fps: 6
-  },
-  wisp: {
-    path: "assets/creeps/wisp-sprite-sheet.png",
-    frameWidth: 242,
-    frameHeight: 260,
-    frames: 4,
-    fps: 6
-  },
-  tank: {
-    path: "assets/creeps/tank-sprite-sheet.png",
-    frameWidth: 270,
-    frameHeight: 302,
-    frames: 4,
-    fps: 6
+  unfuneralOD: {
+    battlefield: "assets/unfuneralod/arena/arena2.png",
+    towers: {
+      violet: "assets/unfuneralod/towers/violet.png",
+      yellow: "assets/unfuneralod/towers/yellow.png",
+      red: "assets/unfuneralod/towers/red.png",
+      green: "assets/unfuneralod/towers/green.png",
+      blue: "assets/unfuneralod/towers/blue.png"
+    },
+    attackerIcons: {
+      imp: null,
+      runner: null,
+      brute: "assets/creeps/eye-icon.png",
+      wisp: "assets/creeps/jellyfish-icon.png",
+      tank: "assets/creeps/tank-icon.png"
+    },
+    attackerSprites: {
+      imp: { path: "assets/unfuneralod/creeps/imp.png", frameWidth: 64, frameHeight: 64, frames: 4, fps: 6, renderWidth: 46, renderHeight: 46, previewFrame: true },
+      runner: { path: "assets/unfuneralod/creeps/runner.png", frameWidth: 64, frameHeight: 64, frames: 4, fps: 6, renderWidth: 46, renderHeight: 46, previewFrame: true },
+      brute: { path: "assets/creeps/brute-sprite-sheet.png", frameWidth: 270, frameHeight: 272, frames: 4, fps: 6 },
+      wisp: { path: "assets/creeps/wisp-sprite-sheet.png", frameWidth: 242, frameHeight: 260, frames: 4, fps: 6 },
+      tank: { path: "assets/creeps/tank-sprite-sheet.png", frameWidth: 270, frameHeight: 302, frames: 4, fps: 6 }
+    }
   }
 };
+
+const ACTIVE_ART_PACK = "jonCarling";
+const activeArtPack = ART_PACKS[ACTIVE_ART_PACK] || ART_PACKS.jonCarling;
+const towerSpritePaths = activeArtPack.towers;
+document.documentElement.dataset.artPack = ACTIVE_ART_PACK;
+
+const attackerDefs = [
+  { id: "imp", name: "Spider", cost: 2, hp: 18, speed: 0.09, color: "#1f2937" },
+  { id: "runner", name: "Runner", cost: 3, hp: 16.2, speed: 0.126, color: "#d97706" },
+  { id: "brute", name: "Eye", cost: 4, hp: 39.6, speed: 0.0825, color: "#15803d" },
+  { id: "wisp", name: "Jellyfish", cost: 5, hp: 30.8, speed: 0.132, color: "#8b5cf6" },
+  { id: "tank", name: "Tank", cost: 6, hp: 57.2, speed: 0.0682, color: "#0f766e" }
+];
+const attackerIconPaths = activeArtPack.attackerIcons;
+const attackerSpriteConfig = activeArtPack.attackerSprites;
 
 const attackerSprites = {};
 for (const attackerId of Object.keys(attackerSpriteConfig)) {
@@ -138,7 +199,7 @@ for (const attackerId of Object.keys(attackerSpriteConfig)) {
   attackerSprites[attackerId] = img;
 }
 const battlefieldBackgroundImage = new Image();
-battlefieldBackgroundImage.src = "assets/arena/battlefield_background.png";
+battlefieldBackgroundImage.src = activeArtPack.battlefield;
 
 const menuScreenEl = document.getElementById("menu-screen");
 const recordsScreenEl = document.getElementById("records-screen");
@@ -223,6 +284,7 @@ const state = {
   attackersAI: [],
   projectiles: [],
   fireBursts: [],
+  yellowLeaps: [],
   towerFlashes: [],
   deathParticles: [],
   nextUnitId: 1,
@@ -256,7 +318,7 @@ const state = {
     yellow: 0,
     red: 0,
     green: 0,
-    orange: 0
+    blue: 0
   },
   roundManaBonusPending: {
     player: 0,
@@ -286,17 +348,17 @@ const laneEnds = {
 const towerPosPlayer = [
   { x: 0.34, y: 0.77 + FIELD_SHIFT_Y },
   { x: 0.66, y: 0.77 + FIELD_SHIFT_Y },
-  { x: 0.22, y: 0.9 + FIELD_SHIFT_Y },
-  { x: 0.5, y: 0.9 + FIELD_SHIFT_Y },
-  { x: 0.78, y: 0.9 + FIELD_SHIFT_Y }
+  { x: 0.22, y: 678 / LOGICAL_CANVAS_HEIGHT },
+  { x: 0.5, y: 678 / LOGICAL_CANVAS_HEIGHT },
+  { x: 0.78, y: 678 / LOGICAL_CANVAS_HEIGHT }
 ];
 
 const towerPosAI = [
   { x: 0.34, y: 0.23 - FIELD_SHIFT_Y },
   { x: 0.66, y: 0.23 - FIELD_SHIFT_Y },
-  { x: 0.22, y: 0.1 - FIELD_SHIFT_Y },
-  { x: 0.5, y: 0.1 - FIELD_SHIFT_Y },
-  { x: 0.78, y: 0.1 - FIELD_SHIFT_Y }
+  { x: 0.22, y: 82 / LOGICAL_CANVAS_HEIGHT },
+  { x: 0.5, y: 82 / LOGICAL_CANVAS_HEIGHT },
+  { x: 0.78, y: 82 / LOGICAL_CANVAS_HEIGHT }
 ];
 
 const slotPosPlayer = towerPosPlayer;
@@ -510,8 +572,7 @@ function normalizePersistentStats(raw) {
       stats.unitScores[scope][attacker.id] = Number.isFinite(value) ? value : 0;
     }
     for (const tower of towerDefs) {
-      const value = raw.towerKills?.[scope]?.[tower.id];
-      stats.towerKills[scope][tower.id] = Number.isFinite(value) ? value : 0;
+      stats.towerKills[scope][tower.id] = readNumberWithLegacyId(raw.towerKills?.[scope], tower.id);
     }
   }
 
@@ -523,10 +584,8 @@ function normalizePersistentStats(raw) {
   }
 
   for (const tower of towerDefs) {
-    const usedValue = raw.matchUsage?.towers?.used?.[tower.id];
-    const winningValue = raw.matchUsage?.towers?.winningTeamUsed?.[tower.id];
-    stats.matchUsage.towers.used[tower.id] = Number.isFinite(usedValue) ? usedValue : 0;
-    stats.matchUsage.towers.winningTeamUsed[tower.id] = Number.isFinite(winningValue) ? winningValue : 0;
+    stats.matchUsage.towers.used[tower.id] = readNumberWithLegacyId(raw.matchUsage?.towers?.used, tower.id);
+    stats.matchUsage.towers.winningTeamUsed[tower.id] = readNumberWithLegacyId(raw.matchUsage?.towers?.winningTeamUsed, tower.id);
   }
 
   return stats;
@@ -614,6 +673,7 @@ function saveMatchStateNow() {
     attackersAI: state.attackersAI,
     projectiles: state.projectiles,
     fireBursts: state.fireBursts,
+    yellowLeaps: state.yellowLeaps,
     towerFlashes: state.towerFlashes,
     deathParticles: state.deathParticles,
     nextUnitId: state.nextUnitId,
@@ -656,7 +716,45 @@ function restoreSavedMatchState() {
     }
 
     Object.assign(state, snapshot);
+    state.playerTowers = Array.isArray(state.playerTowers) ? state.playerTowers.map(normalizeTowerInstance) : [null, null, null, null, null];
+    state.aiTowers = Array.isArray(state.aiTowers) ? state.aiTowers.map(normalizeTowerInstance) : [null, null, null, null, null];
+    state.playerTowerUpgrades = Object.fromEntries(towerDefs.map((tower) => [
+      tower.id,
+      readNumberWithLegacyId(state.playerTowerUpgrades, tower.id)
+    ]));
+    state.matchUsage = {
+      player: {
+        attackers: state.matchUsage?.player?.attackers || {},
+        towers: Object.fromEntries(towerDefs.map((tower) => [
+          tower.id,
+          readBooleanWithLegacyId(state.matchUsage?.player?.towers, tower.id)
+        ]))
+      },
+      ai: {
+        attackers: state.matchUsage?.ai?.attackers || {},
+        towers: Object.fromEntries(towerDefs.map((tower) => [
+          tower.id,
+          readBooleanWithLegacyId(state.matchUsage?.ai?.towers, tower.id)
+        ]))
+      }
+    };
+    state.projectiles = Array.isArray(state.projectiles)
+      ? state.projectiles.map((projectile) => {
+          const towerId = normalizeTowerId(projectile.towerId);
+          return {
+            ...projectile,
+            towerId,
+            color: towerId === "blue" ? "#2563eb" : projectile.color
+          };
+        })
+      : [];
+    state.soundCooldowns = Object.fromEntries(towerDefs.map((tower) => [
+      tower.id,
+      readNumberWithLegacyId(state.soundCooldowns, tower.id)
+    ]));
+    state.shopSelectionId = normalizeTowerId(state.shopSelectionId);
     state.fireBursts = Array.isArray(state.fireBursts) ? state.fireBursts : [];
+    state.yellowLeaps = Array.isArray(state.yellowLeaps) ? state.yellowLeaps : [];
     state.nextFireBurstId = Number.isFinite(state.nextFireBurstId) ? state.nextFireBurstId : 1;
     state.roundManaBonusPending = state.roundManaBonusPending && typeof state.roundManaBonusPending === "object"
       ? {
@@ -1006,7 +1104,8 @@ function resetMatch() {
   state.attackersPlayer = [];
   state.attackersAI = [];
   state.projectiles = [];
-  state.fireBursts = [];
+    state.fireBursts = [];
+    state.yellowLeaps = [];
   state.towerFlashes = [];
   state.deathParticles = [];
   state.nextUnitId = 1;
@@ -1039,7 +1138,7 @@ function resetMatch() {
   state.soundCooldowns.yellow = 0;
   state.soundCooldowns.red = 0;
   state.soundCooldowns.green = 0;
-  state.soundCooldowns.orange = 0;
+  state.soundCooldowns.blue = 0;
   state.roundManaBonusPending.player = 0;
   state.roundManaBonusPending.ai = 0;
   state._aiFanSeeds = [];
@@ -1175,9 +1274,16 @@ function createCards() {
     card.draggable = !prefersTouchInput;
     card.dataset.attackerId = attacker.id;
     card.dataset.cost = String(attacker.cost);
-    if (attackerSpriteConfig[attacker.id]) {
+    const spriteCfg = attackerSpriteConfig[attacker.id];
+    const iconPath = attackerIconPaths[attacker.id];
+    if (spriteCfg?.previewFrame && !iconPath) {
       card.innerHTML = `
-        <img class="attacker-icon-card" src="${attackerIconPaths[attacker.id] || attackerSpriteConfig[attacker.id].path}" alt="${attacker.name}" />
+        <span class="attacker-icon-card attacker-sprite-preview" style="--sprite-url: url('${spriteCfg.path}'); --sprite-frames: ${spriteCfg.frames};" role="img" aria-label="${attacker.name}"></span>
+        <span class="attacker-cost">${attacker.cost}</span>
+      `;
+    } else if (spriteCfg) {
+      card.innerHTML = `
+        <img class="attacker-icon-card" src="${iconPath || spriteCfg.path}" alt="${attacker.name}" />
         <span class="attacker-cost">${attacker.cost}</span>
       `;
     } else {
@@ -2225,7 +2331,35 @@ function spawnProjectile(fromPos, target, damage, color, towerId, owner, speedOv
   });
 }
 
-function applyProjectileDamage(target, damage, towerId, owner, allowAoe = true, slowDurationForHit = null, poisonDotMultiplierForHit = 1, shrapnelDamageMultiplierForHit = 1) {
+function spawnYellowLeapBolt(fromPos, toPos) {
+  state.yellowLeaps.push({
+    fromX: fromPos.x,
+    fromY: fromPos.y,
+    toX: toPos.x,
+    toY: toPos.y,
+    life: 0.12,
+    maxLife: 0.12
+  });
+}
+
+function findYellowLeapTarget(sourceUnit, maxDistancePx = 48) {
+  const sourcePos = attackerPosition(sourceUnit);
+  const enemyList = sourceUnit.owner === "player" ? state.attackersPlayer : state.attackersAI;
+  let best = null;
+  for (const unit of enemyList) {
+    if (unit.id === sourceUnit.id || unit.isDefeated || unit.hp <= 0 || unit.progress >= 1) {
+      continue;
+    }
+    const pos = attackerPosition(unit);
+    const distance = Math.hypot((pos.x - sourcePos.x) * canvas.width, (pos.y - sourcePos.y) * canvas.height);
+    if (distance <= maxDistancePx && (!best || distance < best.distance)) {
+      best = { unit, pos, distance };
+    }
+  }
+  return best;
+}
+
+function applyProjectileDamage(target, damage, towerId, owner, allowAoe = true, slowDurationForHit = null, poisonDotMultiplierForHit = 1, shrapnelDamageMultiplierForHit = 1, allowYellowLeap = true) {
   if (!target || target.isDefeated || damage <= 0) {
     return;
   }
@@ -2233,6 +2367,13 @@ function applyProjectileDamage(target, damage, towerId, owner, allowAoe = true, 
   if (towerId === "yellow") {
     const appliedSlow = Number.isFinite(slowDurationForHit) ? slowDurationForHit : 1.2;
     target.slowTimer = Math.max(target.slowTimer, appliedSlow);
+    if (allowYellowLeap && allowAoe) {
+      const leap = findYellowLeapTarget(target, 48);
+      if (leap) {
+        spawnYellowLeapBolt(attackerPosition(target), leap.pos);
+        applyProjectileDamage(leap.unit, damage * 0.5, towerId, owner, false, appliedSlow * 0.5, poisonDotMultiplierForHit, shrapnelDamageMultiplierForHit, false);
+      }
+    }
   }
   if (towerId === "green") {
     target.poisonTimer = 3;
@@ -2249,7 +2390,6 @@ function applyProjectileDamage(target, damage, towerId, owner, allowAoe = true, 
   }
   if (target.hp <= 0 && !target.isDefeated) {
     target.isDefeated = true;
-    grantRoundManaBonus(owner, 1);
     if (getTowerDef(towerId)) {
       recordTowerKill(towerId, owner);
     }
@@ -2524,7 +2664,7 @@ function playTowerFireSfx(towerId) {
     return;
   }
 
-  if (towerId === "orange") {
+  if (towerId === "blue") {
     const osc = ctxAudio.createOscillator();
     const gain = ctxAudio.createGain();
     const filter = ctxAudio.createBiquadFilter();
@@ -2662,9 +2802,9 @@ function updateTowerFire(dt) {
       );
     }
     spawnTowerFlash(towerPosPlayer[i], tower.color);
-    if ((tower.id === "violet" || tower.id === "yellow" || tower.id === "red" || tower.id === "green" || tower.id === "orange") && state.soundCooldowns[tower.id] <= 0) {
+    if ((tower.id === "violet" || tower.id === "yellow" || tower.id === "red" || tower.id === "green" || tower.id === "blue") && state.soundCooldowns[tower.id] <= 0) {
       playTowerFireSfx(tower.id);
-      state.soundCooldowns[tower.id] = tower.id === "orange" ? 0.08 : tower.id === "red" ? 0.075 : tower.id === "violet" ? 0.07 : 0.06;
+      state.soundCooldowns[tower.id] = tower.id === "blue" ? 0.08 : tower.id === "red" ? 0.075 : tower.id === "violet" ? 0.07 : 0.06;
     }
     tower.cooldown = tower.fireRate;
   }
@@ -2697,9 +2837,9 @@ function updateTowerFire(dt) {
       );
     }
     spawnTowerFlash(towerPosAI[i], tower.color);
-    if ((tower.id === "violet" || tower.id === "yellow" || tower.id === "red" || tower.id === "green" || tower.id === "orange") && state.soundCooldowns[tower.id] <= 0) {
+    if ((tower.id === "violet" || tower.id === "yellow" || tower.id === "red" || tower.id === "green" || tower.id === "blue") && state.soundCooldowns[tower.id] <= 0) {
       playTowerFireSfx(tower.id);
-      state.soundCooldowns[tower.id] = tower.id === "orange" ? 0.08 : tower.id === "red" ? 0.075 : tower.id === "violet" ? 0.07 : 0.06;
+      state.soundCooldowns[tower.id] = tower.id === "blue" ? 0.08 : tower.id === "red" ? 0.075 : tower.id === "violet" ? 0.07 : 0.06;
     }
     tower.cooldown = tower.fireRate;
   }
@@ -2739,8 +2879,8 @@ function updateProjectiles(dt) {
         projectile.poisonDotMultiplier,
         projectile.shrapnelDamageMultiplier
       );
-      if (projectile.towerId === "orange") {
-        spawnProjectileImpactParticles(projectile.x, projectile.y, "#fdba74", 8);
+      if (projectile.towerId === "blue") {
+        spawnProjectileImpactParticles(projectile.x, projectile.y, "#93c5fd", 8);
       }
       continue;
     }
@@ -2805,6 +2945,17 @@ function updateTowerFlashes(dt) {
     }
   }
   state.towerFlashes = active;
+}
+
+function updateYellowLeaps(dt) {
+  const active = [];
+  for (const leap of state.yellowLeaps) {
+    leap.life -= dt;
+    if (leap.life > 0) {
+      active.push(leap);
+    }
+  }
+  state.yellowLeaps = active;
 }
 
 function updateDeathParticles(dt) {
@@ -2880,7 +3031,6 @@ function updateAttackers(dt) {
     if (unit.hp <= 0 && !unit.isDefeated) {
       unit.isDefeated = true;
       if (unit.poisonSourceOwner) {
-        grantRoundManaBonus(unit.poisonSourceOwner, 1);
         recordTowerKill("green", unit.poisonSourceOwner);
       }
     }
@@ -2892,7 +3042,6 @@ function updateAttackers(dt) {
     if (unit.hp <= 0 && !unit.isDefeated) {
       unit.isDefeated = true;
       if (unit.poisonSourceOwner) {
-        grantRoundManaBonus(unit.poisonSourceOwner, 1);
         recordTowerKill("green", unit.poisonSourceOwner);
       }
     }
@@ -2923,7 +3072,7 @@ function updateGame(dt) {
   state.soundCooldowns.yellow = Math.max(0, state.soundCooldowns.yellow - dt);
   state.soundCooldowns.red = Math.max(0, state.soundCooldowns.red - dt);
   state.soundCooldowns.green = Math.max(0, state.soundCooldowns.green - dt);
-  state.soundCooldowns.orange = Math.max(0, state.soundCooldowns.orange - dt);
+  state.soundCooldowns.blue = Math.max(0, state.soundCooldowns.blue - dt);
 
   if (state.phase === "banner") {
     state.roundBannerTimer -= dt;
@@ -2957,16 +3106,18 @@ function updateGame(dt) {
     updateAttackers(dt);
     updateTowerFire(dt);
     updateTankCreepFire(dt);
-    updateProjectiles(dt);
-    updateFireBursts(dt);
-    updateTowerFlashes(dt);
-    updateDeathParticles(dt);
+  updateProjectiles(dt);
+  updateFireBursts(dt);
+  updateTowerFlashes(dt);
+  updateYellowLeaps(dt);
+  updateDeathParticles(dt);
 
     if (
       state.attackersPlayer.length === 0 &&
       state.attackersAI.length === 0 &&
       state.projectiles.length === 0 &&
       state.fireBursts.length === 0 &&
+      state.yellowLeaps.length === 0 &&
       state.deathParticles.length === 0
     ) {
       onBattleFinished();
@@ -3037,9 +3188,10 @@ function drawAttackers(units) {
     const pos = attackerPosition(unit);
     const x = canvas.width * pos.x;
     const y = canvas.height * pos.y;
-    const spriteSize = 42;
-
     const spriteCfg = attackerSpriteConfig[unit.defId];
+    const renderWidth = spriteCfg?.renderWidth || 42;
+    const renderHeight = spriteCfg?.renderHeight || 42;
+
     const spriteImg = attackerSprites[unit.defId];
     if (spriteCfg && spriteImg && spriteImg.complete) {
       const frame = Math.floor(state.animationClock * spriteCfg.fps) % spriteCfg.frames;
@@ -3054,10 +3206,10 @@ function drawAttackers(units) {
           0,
           spriteCfg.frameWidth,
           spriteCfg.frameHeight,
-          -spriteSize / 2,
-          -spriteSize / 2,
-          spriteSize,
-          spriteSize
+          -renderWidth / 2,
+          -renderHeight / 2,
+          renderWidth,
+          renderHeight
         );
         ctx.restore();
       } else {
@@ -3067,10 +3219,10 @@ function drawAttackers(units) {
           0,
           spriteCfg.frameWidth,
           spriteCfg.frameHeight,
-          x - spriteSize / 2,
-          y - spriteSize / 2,
-          spriteSize,
-          spriteSize
+          x - renderWidth / 2,
+          y - renderHeight / 2,
+          renderWidth,
+          renderHeight
         );
       }
     } else {
@@ -3081,7 +3233,7 @@ function drawAttackers(units) {
     }
 
     const hpRatio = clamp(unit.hp / unit.maxHp, 0, 1);
-    const hpBarY = y - (spriteSize / 2) - 6;
+    const hpBarY = y - (renderHeight / 2) - 6;
     ctx.fillStyle = "#111827";
     ctx.fillRect(x - 10, hpBarY, 20, 3);
     ctx.fillStyle = "#22c55e";
@@ -3273,16 +3425,16 @@ function drawProjectiles() {
       continue;
     }
 
-    if (projectile.towerId === "orange") {
-      ctx.fillStyle = "rgba(251, 146, 60, 0.28)";
+    if (projectile.towerId === "blue") {
+      ctx.fillStyle = "rgba(96, 165, 250, 0.28)";
       ctx.beginPath();
       ctx.arc(x, y, 7.4, 0, Math.PI * 2);
       ctx.fill();
-      ctx.fillStyle = "#f97316";
+      ctx.fillStyle = "#2563eb";
       ctx.beginPath();
       ctx.arc(x, y, 6.6, 0, Math.PI * 2);
       ctx.fill();
-      ctx.fillStyle = "#fdba74";
+      ctx.fillStyle = "#bfdbfe";
       ctx.beginPath();
       ctx.arc(x - 1.2, y - 1.2, 2.1, 0, Math.PI * 2);
       ctx.fill();
@@ -3316,6 +3468,38 @@ function drawFireBursts() {
     ctx.globalAlpha = 0.45 + t * 0.45;
     ctx.fillStyle = t > 0.5 ? "#fb923c" : "#fca5a5";
     ctx.fillRect(x - 1.25, y - 1.25, 2.5, 2.5);
+    ctx.globalAlpha = 1;
+  }
+}
+
+function drawYellowLeaps() {
+  for (const leap of state.yellowLeaps) {
+    const t = clamp(leap.life / leap.maxLife, 0, 1);
+    const x0 = canvas.width * leap.fromX;
+    const y0 = canvas.height * leap.fromY;
+    const x1 = canvas.width * leap.toX;
+    const y1 = canvas.height * leap.toY;
+    const midX = (x0 + x1) * 0.5;
+    const midY = (y0 + y1) * 0.5;
+    const jitter = Math.sin(state.animationClock * 80 + leap.fromX * 17) * 4;
+
+    ctx.globalAlpha = 0.25 + t * 0.75;
+    ctx.lineCap = "round";
+    ctx.strokeStyle = "rgba(250, 204, 21, 0.86)";
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(x0, y0);
+    ctx.lineTo(midX + jitter, midY - jitter);
+    ctx.lineTo(x1, y1);
+    ctx.stroke();
+
+    ctx.strokeStyle = "rgba(254, 249, 195, 0.95)";
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    ctx.moveTo(x0, y0);
+    ctx.lineTo(midX - jitter * 0.4, midY + jitter * 0.4);
+    ctx.lineTo(x1, y1);
+    ctx.stroke();
     ctx.globalAlpha = 1;
   }
 }
@@ -3376,6 +3560,7 @@ function drawBoard() {
   drawAttackers(state.attackersAI);
   drawProjectiles();
   drawFireBursts();
+  drawYellowLeaps();
   drawTowerFlashes();
   drawDeathParticles();
   drawRoundBanner();

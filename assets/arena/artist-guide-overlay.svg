@@ -36,17 +36,17 @@
   <!-- AI tower slot anchors -->
   <circle cx="143" cy="165" r="16" class="slot-ai"/>
   <circle cx="277" cy="165" r="16" class="slot-ai"/>
-  <circle cx="92" cy="66" r="16" class="slot-ai"/>
-  <circle cx="210" cy="66" r="16" class="slot-ai"/>
-  <circle cx="328" cy="66" r="16" class="slot-ai"/>
-  <text x="10" y="92" class="label">AI tower slots</text>
+  <circle cx="92" cy="82" r="16" class="slot-ai"/>
+  <circle cx="210" cy="82" r="16" class="slot-ai"/>
+  <circle cx="328" cy="82" r="16" class="slot-ai"/>
+  <text x="10" y="108" class="label">AI tower slots</text>
 
   <!-- Player tower slot anchors -->
   <circle cx="143" cy="595" r="16" class="slot"/>
   <circle cx="277" cy="595" r="16" class="slot"/>
-  <circle cx="92" cy="694" r="16" class="slot"/>
-  <circle cx="210" cy="694" r="16" class="slot"/>
-  <circle cx="328" cy="694" r="16" class="slot"/>
+  <circle cx="92" cy="678" r="16" class="slot"/>
+  <circle cx="210" cy="678" r="16" class="slot"/>
+  <circle cx="328" cy="678" r="16" class="slot"/>
   <text x="10" y="742" class="label">Player tower slots</text>
 
   <!-- Safe framing hint -->

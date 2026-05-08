@@ -50,9 +50,9 @@ function Get-DefaultStatsJson {
     "ai": { "imp": 0, "runner": 0, "brute": 0, "wisp": 0, "tank": 0 }
   },
   "towerKills": {
-    "total": { "violet": 0, "yellow": 0, "red": 0, "green": 0, "orange": 0 },
-    "player": { "violet": 0, "yellow": 0, "red": 0, "green": 0, "orange": 0 },
-    "ai": { "violet": 0, "yellow": 0, "red": 0, "green": 0, "orange": 0 }
+    "total": { "violet": 0, "yellow": 0, "red": 0, "green": 0, "blue": 0 },
+    "player": { "violet": 0, "yellow": 0, "red": 0, "green": 0, "blue": 0 },
+    "ai": { "violet": 0, "yellow": 0, "red": 0, "green": 0, "blue": 0 }
   },
   "matchUsage": {
     "attackers": {
@@ -60,8 +60,8 @@ function Get-DefaultStatsJson {
       "winningTeamUsed": { "imp": 0, "runner": 0, "brute": 0, "wisp": 0, "tank": 0 }
     },
     "towers": {
-      "used": { "violet": 0, "yellow": 0, "red": 0, "green": 0, "orange": 0 },
-      "winningTeamUsed": { "violet": 0, "yellow": 0, "red": 0, "green": 0, "orange": 0 }
+      "used": { "violet": 0, "yellow": 0, "red": 0, "green": 0, "blue": 0 },
+      "winningTeamUsed": { "violet": 0, "yellow": 0, "red": 0, "green": 0, "blue": 0 }
     }
   }
 }

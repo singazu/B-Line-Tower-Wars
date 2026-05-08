@@ -24,7 +24,7 @@ Received:
 - `C:/Users/bmaga/Downloads/green_tower_jc.png`
 - `C:/Users/bmaga/Downloads/purple_tower_jc.png`
 - `C:/Users/bmaga/Downloads/yellow_tower_jc.png`
-- `C:/Users/bmaga/Downloads/orange_tower_jc.png`
+- `C:/Users/bmaga/Downloads/blue_tower_jc.png`
 - `C:/Users/bmaga/Downloads/red_tower_jc.png`
 
 ### Technical Readiness Snapshot
@@ -38,7 +38,7 @@ Measured canvas/bounds:
 | green_tower_jc.png | 384x384 | 278x323 | 55 / 51 | 34 / 27 | +2.0 px |
 | purple_tower_jc.png | 384x384 | 236x335 | 76 / 72 | 36 / 13 | +2.0 px |
 | yellow_tower_jc.png | 336x384 | 264x332 | 37 / 35 | 30 / 22 | +1.0 px |
-| orange_tower_jc.png | 384x384 | 239x328 | 76 / 69 | 30 / 26 | +3.5 px |
+| blue_tower_jc.png | 384x384 | 239x328 | 76 / 69 | 30 / 26 | +3.5 px |
 | red_tower_jc.png | 384x384 | 291x332 | 53 / 40 | 35 / 17 | +6.5 px |
 
 Notes:
@@ -52,7 +52,7 @@ Notes:
 - `green_tower_jc.png`: `Use with guardrails`
 - `purple_tower_jc.png`: `Use with guardrails`
 - `yellow_tower_jc.png`: `Use with guardrails`
-- `orange_tower_jc.png`: `Use with guardrails`
+- `blue_tower_jc.png`: `Use with guardrails`
 - `red_tower_jc.png`: `Use with guardrails`
 
 None are true `Hold` candidates for first-draft gameplay.

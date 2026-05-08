@@ -1,6 +1,6 @@
 ﻿creep_id,display_name,cost_mana,hp,speed_progress_per_second,time_to_goal_seconds_at_full_path,hp_per_mana,speed_per_mana,has_sprite,sprite_sheet_path,sprite_frames,sprite_fps,ai_forced_test_wave,button_icon_source,notes
-imp,Imp,2,20,0.1,10,10,0.05,yes,assets/creeps/imp-sprite-sheet.png,3,6,,frame_1,Low-cost baseline
-runner,Runner,3,18,0.14,7.1429,6,0.0467,yes,assets/creeps/runner-sprite-sheet.png,3,6,,frame_1,Fast low-HP unit
-brute,Brute,4,36,0.075,13.3333,9,0.0188,yes,assets/creeps/brute-sprite-sheet.png,3,6,,frame_1,High HP slow bruiser
-wisp,Wisp,5,28,0.12,8.3333,5.6,0.024,yes,assets/creeps/wisp-sprite-sheet.png,3,6,1,frame_1,AI-side battlefield sprite is vertically inverted
-tank,Tank,6,52,0.062,16.129,8.6667,0.0103,yes,assets/creeps/tank-sprite-sheet.png,3,6,2,frame_1,AI-side battlefield sprite is vertically inverted
+imp,Imp,2,18,0.09,11.1111,9,0.045,yes,assets/creeps/imp-sprite-sheet.png,3,6,,frame_1,HP and speed reduced 10%
+runner,Runner,3,16.2,0.126,7.9365,5.4,0.042,yes,assets/creeps/runner-sprite-sheet.png,3,6,,frame_1,HP and speed reduced 10%
+brute,Brute,4,39.6,0.0825,12.1212,9.9,0.0206,yes,assets/creeps/brute-sprite-sheet.png,3,6,,frame_1,HP and speed increased 10%
+wisp,Wisp,5,30.8,0.132,7.5758,6.16,0.0264,yes,assets/creeps/wisp-sprite-sheet.png,3,6,1,frame_1,HP and speed increased 10%; AI-side battlefield sprite is vertically inverted
+tank,Tank,6,57.2,0.0682,14.6628,9.5333,0.0114,yes,assets/creeps/tank-sprite-sheet.png,3,6,2,frame_1,HP and speed increased 10%; AI-side battlefield sprite is vertically inverted

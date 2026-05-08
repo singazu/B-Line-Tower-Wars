@@ -824,7 +824,7 @@ window.MP = (function () {
     _opponentRole = null;
   }
 
-  const VALID_TOWER_IDS = ["violet", "yellow", "red", "green", "orange", null];
+  const VALID_TOWER_IDS = ["violet", "yellow", "red", "green", "blue", "orange", null];
   const VALID_ATTACKER_IDS = ["imp", "runner", "brute", "wisp", "tank"];
 
   function validatePrepData(data) {

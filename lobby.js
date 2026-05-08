@@ -316,13 +316,14 @@
 
   function _sanitizeOpponentPrepData(raw) {
     const safe = (raw && typeof raw === "object") ? { ...raw } : {};
-    const validTowerIds = new Set(["violet", "yellow", "red", "green", "orange"]);
+    const normalizeOpponentTowerId = (towerId) => towerId === "orange" ? "blue" : towerId;
+    const validTowerIds = new Set(["violet", "yellow", "red", "green", "blue"]);
     const validAttackerIds = new Set(attackerDefs.map((attacker) => attacker.id));
 
     const towers = Array.isArray(safe.towers) ? safe.towers.slice(0, 5) : [];
     while (towers.length < 5) towers.push(null);
     for (let i = 0; i < towers.length; i += 1) {
-      const towerId = towers[i];
+      const towerId = normalizeOpponentTowerId(towers[i]);
       towers[i] = validTowerIds.has(towerId) ? towerId : null;
     }
     safe.towers = towers;
