@@ -10,6 +10,7 @@ const TOWER_UPGRADE_MULTIPLIER = 1.2;
 const MAX_TOWER_UPGRADES = 2;
 const STATS_STORAGE_KEY = "bline-tower-wars-match-stats";
 const MATCH_STATE_STORAGE_KEY = "line-tower-wars-active-match";
+const OPTIONS_STORAGE_KEY = "bline-tower-wars-options";
 
 // Multiplayer mode — set by lobby.js when a match is found, cleared on exit
 let multiplayerRole          = null;   // null | "host" | "guest"
@@ -176,11 +177,6 @@ const ART_PACKS = {
   }
 };
 
-const ACTIVE_ART_PACK = "jonCarling";
-const activeArtPack = ART_PACKS[ACTIVE_ART_PACK] || ART_PACKS.jonCarling;
-const towerSpritePaths = activeArtPack.towers;
-document.documentElement.dataset.artPack = ACTIVE_ART_PACK;
-
 const attackerDefs = [
   { id: "imp", name: "Spider", cost: 2, hp: 18, speed: 0.09, color: "#1f2937" },
   { id: "runner", name: "Runner", cost: 3, hp: 16.2, speed: 0.126, color: "#d97706" },
@@ -188,25 +184,125 @@ const attackerDefs = [
   { id: "wisp", name: "Jellyfish", cost: 5, hp: 30.8, speed: 0.132, color: "#8b5cf6" },
   { id: "tank", name: "Tank", cost: 6, hp: 57.2, speed: 0.0682, color: "#0f766e" }
 ];
-const attackerIconPaths = activeArtPack.attackerIcons;
-const attackerSpriteConfig = activeArtPack.attackerSprites;
-
-const attackerSprites = {};
-for (const attackerId of Object.keys(attackerSpriteConfig)) {
-  const cfg = attackerSpriteConfig[attackerId];
-  const img = new Image();
-  img.src = cfg.path;
-  attackerSprites[attackerId] = img;
-}
+const DEFAULT_OPTIONS = {
+  difficulty: "yellow",
+  artPack: "jonCarling"
+};
+const ART_PACK_OPTIONS = [
+  { id: "jonCarling", name: "Jon Carling", unlocked: true, icon: "assets/ui/artist-icons/joncarling.png", instagram: "https://www.instagram.com/joncarling/", preview: { creeps: ["imp", "runner"], towers: ["violet", "yellow"] } },
+  { id: "unfuneralOD", name: "UnfuneralOD", unlocked: true, icon: "assets/ui/artist-icons/unfuneralod.png", instagram: "https://www.instagram.com/unfuneralod/", preview: { creeps: ["imp", "runner"], towers: ["violet", "green"] } },
+  { id: "artist3", name: "Artist Slot 3", unlocked: false, preview: { creeps: ["imp", "runner"], towers: ["red", "blue"] } },
+  { id: "artist4", name: "Artist Slot 4", unlocked: false, preview: { creeps: ["brute", "wisp"], towers: ["violet", "yellow"] } },
+  { id: "artist5", name: "Artist Slot 5", unlocked: false, preview: { creeps: ["runner", "tank"], towers: ["green", "blue"] } },
+  { id: "artist6", name: "Artist Slot 6", unlocked: false, preview: { creeps: ["imp", "wisp"], towers: ["red", "green"] } },
+  { id: "artist7", name: "Artist Slot 7", unlocked: false, preview: { creeps: ["brute", "tank"], towers: ["yellow", "blue"] } },
+  { id: "artist8", name: "Artist Slot 8", unlocked: false, preview: { creeps: ["runner", "brute"], towers: ["violet", "red"] } }
+];
+const AI_DIFFICULTY_SETTINGS = {
+  purple: {
+    label: "Purple",
+    level: "Easy",
+    summary: "Forgiving AI. It over-saves, sends slower waves, and gives up the strongest tower priorities.",
+    manaBonusPerRound: 1,
+    defenseRatioScale: 0.72,
+    reserveScale: 1.55,
+    postReserveScale: 1.45,
+    maxPlacements: 1,
+    minAttackBudgetScale: 0.55,
+    towerWeights: { violet: 0.5, yellow: -1.1, red: -0.2, green: -0.8, blue: -1.2 },
+    attackerPatterns: [["tank"], ["wisp", "tank"], ["brute", "tank"]],
+    fallbackOrder: ["tank", "wisp", "brute", "runner", "imp"],
+    randomTowerNoise: 0.9,
+    considerTowerUpgrades: false
+  },
+  yellow: {
+    label: "Yellow",
+    level: "Medium",
+    summary: "Balanced AI. It considers every tower and creep, including tower upgrades, with a modest economy bonus.",
+    manaBonusPerRound: 2,
+    defenseRatioScale: 0.95,
+    reserveScale: 1.05,
+    postReserveScale: 1,
+    maxPlacements: 2,
+    minAttackBudgetScale: 0.9,
+    towerWeights: { violet: 0.15, yellow: 0.2, red: 0, green: 0.15, blue: 0.1 },
+    attackerPatterns: [["runner", "runner", "imp", "runner", "imp"], ["imp", "runner", "brute", "wisp", "runner"], ["brute", "wisp", "tank", "imp"]],
+    fallbackOrder: ["runner", "imp", "brute", "wisp", "tank"],
+    randomTowerNoise: 0.22,
+    considerTowerUpgrades: true
+  },
+  red: {
+    label: "Red",
+    level: "Hard",
+    summary: "Aggressive AI. It leans on rush and imp pressure, with green support from the simulation's upper middle.",
+    manaBonusPerRound: 3,
+    defenseRatioScale: 0.88,
+    reserveScale: 0.92,
+    postReserveScale: 0.76,
+    maxPlacements: 2,
+    minAttackBudgetScale: 1.1,
+    towerWeights: { violet: 0.45, yellow: 0.3, red: 0.2, green: 0.65, blue: 0.35 },
+    attackerPatterns: [["runner", "imp", "runner", "imp", "runner"], ["imp", "imp", "runner", "brute", "imp"], ["brute", "imp", "wisp", "runner"]],
+    fallbackOrder: ["imp", "runner", "brute", "wisp", "tank"],
+    randomTowerNoise: 0.12,
+    considerTowerUpgrades: true
+  },
+  green: {
+    label: "Green",
+    level: "Very Hard",
+    summary: "Sharp AI. It combines the strongest tower samples with steady rush pressure.",
+    manaBonusPerRound: 4,
+    defenseRatioScale: 1,
+    reserveScale: 0.78,
+    postReserveScale: 0.58,
+    maxPlacements: 2,
+    minAttackBudgetScale: 1.25,
+    towerWeights: { violet: 0.9, yellow: 0.65, red: 0.15, green: 0.55, blue: 0.95 },
+    attackerPatterns: [["runner", "imp", "runner", "imp", "runner", "imp"], ["imp", "runner", "brute", "imp", "runner"], ["brute", "wisp", "imp", "runner"]],
+    fallbackOrder: ["runner", "imp", "brute", "wisp", "tank"],
+    randomTowerNoise: 0.06,
+    considerTowerUpgrades: true
+  },
+  blue: {
+    label: "Blue",
+    level: "Ludicrous",
+    summary: "No mercy. It borrows from the top simulated tower-heavy strategies and rush pressure.",
+    manaBonusPerRound: 5,
+    defenseRatioScale: 1.08,
+    reserveScale: 0.62,
+    postReserveScale: 0.38,
+    maxPlacements: 3,
+    minAttackBudgetScale: 1.45,
+    towerWeights: { violet: 1, yellow: 1.25, red: 0.25, green: 0.65, blue: 1 },
+    attackerPatterns: [["runner", "imp", "runner", "imp", "runner", "imp", "runner"], ["imp", "runner", "imp", "brute", "runner", "imp"], ["brute", "wisp", "imp", "runner", "tank"]],
+    fallbackOrder: ["runner", "imp", "brute", "wisp", "tank"],
+    randomTowerNoise: 0.02,
+    considerTowerUpgrades: true
+  }
+};
+let gameOptions = { ...DEFAULT_OPTIONS };
+let activeArtPackId = DEFAULT_OPTIONS.artPack;
+let activeArtPack = ART_PACKS[activeArtPackId] || ART_PACKS.jonCarling;
+let towerSpritePaths = activeArtPack.towers;
+let attackerIconPaths = activeArtPack.attackerIcons;
+let attackerSpriteConfig = activeArtPack.attackerSprites;
+let attackerSprites = {};
 const battlefieldBackgroundImage = new Image();
-battlefieldBackgroundImage.src = activeArtPack.battlefield;
+document.documentElement.dataset.artPack = activeArtPackId;
+applyArtPack(activeArtPackId);
 
 const menuScreenEl = document.getElementById("menu-screen");
+const optionsScreenEl = document.getElementById("options-screen");
 const recordsScreenEl = document.getElementById("records-screen");
 const gameScreenEl = document.getElementById("game-screen");
 const appShellEl = document.getElementById("app-shell");
 const orientationNoticeEl = document.getElementById("orientation-notice");
 const playMatchBtnEl = document.getElementById("play-match-btn");
+const openOptionsBtnEl = document.getElementById("open-options-btn");
+const optionsBackBtnEl = document.getElementById("options-back-btn");
+const difficultyListEl = document.getElementById("difficulty-list");
+const difficultySummaryEl = document.getElementById("difficulty-summary");
+const artPackGridEl = document.getElementById("art-pack-grid");
 const resumeMatchBtnEl = document.getElementById("resume-match-btn");
 const openRecordsBtnEl = document.getElementById("open-records-btn");
 const recordsBackBtnEl = document.getElementById("records-back-btn");
@@ -887,6 +983,178 @@ function renderRankingRows(container, items, emptyLabel) {
   `).join("");
 }
 
+function getArtPackOption(artPackId) {
+  return ART_PACK_OPTIONS.find((option) => option.id === artPackId) || ART_PACK_OPTIONS[0];
+}
+
+function getArtPackForPreview(option) {
+  const sourceId = ART_PACKS[option.id] ? option.id : (option.previewSource || DEFAULT_OPTIONS.artPack);
+  return ART_PACKS[sourceId] || ART_PACKS[DEFAULT_OPTIONS.artPack];
+}
+
+function getAttackerPreviewMarkup(pack, attackerId, alt) {
+  const fallbackPack = ART_PACKS[DEFAULT_OPTIONS.artPack];
+  const spriteCfg = pack.attackerSprites?.[attackerId] || fallbackPack.attackerSprites?.[attackerId];
+  const iconPath = pack.attackerIcons?.[attackerId] || fallbackPack.attackerIcons?.[attackerId] || spriteCfg?.path;
+  if (spriteCfg?.previewFrame && !pack.attackerIcons?.[attackerId]) {
+    return `<span class="art-thumb-sprite" style="--sprite-url: url('${spriteCfg.path}'); --sprite-frames: ${spriteCfg.frames};" role="img" aria-label="${alt}"></span>`;
+  }
+  return `<img src="${iconPath}" alt="${alt}" />`;
+}
+
+function renderArtPackOptions() {
+  if (!artPackGridEl) {
+    return;
+  }
+
+  artPackGridEl.innerHTML = ART_PACK_OPTIONS.map((option) => {
+    const pack = getArtPackForPreview(option);
+    const fallbackPack = ART_PACKS[DEFAULT_OPTIONS.artPack];
+    const preview = option.preview;
+    const towerA = pack.towers?.[preview.towers[0]] || fallbackPack.towers[preview.towers[0]];
+    const towerB = pack.towers?.[preview.towers[1]] || fallbackPack.towers[preview.towers[1]];
+    const lockedLabel = option.unlocked ? "" : `<span class="art-lock">In-App Purchase</span>`;
+    const iconLink = option.icon && option.instagram
+      ? `<a class="artist-social-link" href="${option.instagram}" target="_blank" rel="noopener noreferrer" aria-label="${option.name} Instagram"><img src="${option.icon}" alt="" /></a>`
+      : "";
+    const thumbnailCells = option.unlocked
+      ? `
+          <span class="art-thumb-cell">${getAttackerPreviewMarkup(pack, preview.creeps[0], `${option.name} creep`)}</span>
+          <span class="art-thumb-cell"><img src="${towerA}" alt="" /></span>
+          <span class="art-thumb-cell"><img src="${towerB}" alt="" /></span>
+          <span class="art-thumb-cell">${getAttackerPreviewMarkup(pack, preview.creeps[1], `${option.name} creep`)}</span>
+        `
+      : `
+          <span class="art-thumb-cell locked-placeholder"></span>
+          <span class="art-thumb-cell locked-placeholder"></span>
+          <span class="art-thumb-cell locked-placeholder"></span>
+          <span class="art-thumb-cell locked-placeholder"></span>
+        `;
+    return `
+      <div class="art-pack-option${option.unlocked ? "" : " locked"}" role="radio" tabindex="${option.unlocked ? "0" : "-1"}" aria-checked="false" data-art-pack="${option.id}" ${option.unlocked ? "" : "aria-disabled=\"true\""} aria-label="${option.name}${option.unlocked ? "" : " locked"}">
+        <span class="art-thumb-grid" aria-hidden="true">
+          ${thumbnailCells}
+        </span>
+        <span class="art-pack-name-row">
+          <strong>${option.name}</strong>
+          ${iconLink}
+        </span>
+        ${lockedLabel}
+      </div>
+    `;
+  }).join("");
+}
+
+function refreshArtOptionsUI() {
+  if (!artPackGridEl) {
+    return;
+  }
+  for (const option of artPackGridEl.querySelectorAll(".art-pack-option")) {
+    const selected = option.dataset.artPack === gameOptions.artPack;
+    option.setAttribute("aria-checked", selected ? "true" : "false");
+  }
+}
+
+function applyArtPack(artPackId, rerender = false) {
+  const nextPack = ART_PACKS[artPackId] || ART_PACKS[DEFAULT_OPTIONS.artPack];
+  activeArtPackId = ART_PACKS[artPackId] ? artPackId : DEFAULT_OPTIONS.artPack;
+  activeArtPack = nextPack;
+  towerSpritePaths = activeArtPack.towers;
+  attackerIconPaths = activeArtPack.attackerIcons;
+  attackerSpriteConfig = activeArtPack.attackerSprites;
+  attackerSprites = {};
+  for (const attackerId of Object.keys(attackerSpriteConfig)) {
+    const cfg = attackerSpriteConfig[attackerId];
+    const img = new Image();
+    img.src = cfg.path;
+    attackerSprites[attackerId] = img;
+  }
+  battlefieldBackgroundImage.src = activeArtPack.battlefield;
+  document.documentElement.dataset.artPack = activeArtPackId;
+
+  if (rerender) {
+    createCards();
+    refreshAllUI();
+  }
+}
+
+function getAIDifficultySettings() {
+  return AI_DIFFICULTY_SETTINGS[gameOptions.difficulty] || AI_DIFFICULTY_SETTINGS[DEFAULT_OPTIONS.difficulty];
+}
+
+function getAIManaBonusPerRound() {
+  const configuredBonus = getAIDifficultySettings().manaBonusPerRound;
+  return Number.isFinite(configuredBonus) ? configuredBonus : AI_MANA_BONUS_PER_ROUND;
+}
+
+function loadOptions() {
+  try {
+    const raw = localStorage.getItem(OPTIONS_STORAGE_KEY);
+    if (!raw) {
+      gameOptions = { ...DEFAULT_OPTIONS };
+      applyArtPack(gameOptions.artPack);
+      return;
+    }
+    const parsed = JSON.parse(raw);
+    gameOptions = {
+      ...DEFAULT_OPTIONS,
+      ...parsed
+    };
+    if (!AI_DIFFICULTY_SETTINGS[gameOptions.difficulty]) {
+      gameOptions.difficulty = DEFAULT_OPTIONS.difficulty;
+    }
+    if (!ART_PACKS[gameOptions.artPack]) {
+      gameOptions.artPack = DEFAULT_OPTIONS.artPack;
+    }
+  } catch {
+    gameOptions = { ...DEFAULT_OPTIONS };
+  }
+  applyArtPack(gameOptions.artPack);
+}
+
+function saveOptions() {
+  try {
+    localStorage.setItem(OPTIONS_STORAGE_KEY, JSON.stringify(gameOptions));
+  } catch {
+  }
+}
+
+function setDifficulty(difficulty) {
+  if (!AI_DIFFICULTY_SETTINGS[difficulty]) {
+    return;
+  }
+  gameOptions.difficulty = difficulty;
+  saveOptions();
+  refreshOptionsUI();
+}
+
+function setArtPack(artPackId) {
+  const option = getArtPackOption(artPackId);
+  if (!option.unlocked || !ART_PACKS[artPackId]) {
+    return;
+  }
+  gameOptions.artPack = artPackId;
+  applyArtPack(artPackId, true);
+  saveOptions();
+  refreshArtOptionsUI();
+}
+
+function refreshOptionsUI() {
+  const settings = getAIDifficultySettings();
+  if (difficultySummaryEl) {
+    difficultySummaryEl.textContent = settings.summary;
+  }
+  renderArtPackOptions();
+  if (!difficultyListEl) {
+    return;
+  }
+  for (const option of difficultyListEl.querySelectorAll(".difficulty-option")) {
+    const selected = option.dataset.difficulty === gameOptions.difficulty;
+    option.setAttribute("aria-checked", selected ? "true" : "false");
+  }
+  refreshArtOptionsUI();
+}
+
 function refreshMenuUI() {
   const profile = getProfileStats();
   const hasResume = state.hasActiveMatch && !state.gameOver && multiplayerRole === null;
@@ -920,15 +1188,18 @@ function refreshRecordsUI() {
 
 function refreshMetaUI() {
   refreshMenuUI();
+  refreshOptionsUI();
   refreshRecordsUI();
 }
 
 function setScreen(screen) {
   state.screen = screen;
   menuScreenEl.classList.toggle("hidden", screen !== "menu");
+  optionsScreenEl.classList.toggle("hidden", screen !== "options");
   recordsScreenEl.classList.toggle("hidden", screen !== "records");
   gameScreenEl.classList.toggle("hidden", screen !== "game");
   refreshMenuUI();
+  refreshOptionsUI();
   refreshRecordsUI();
   updateOrientationNotice();
   requestAnimationFrame(resizeBattlefieldFrame);
@@ -1168,6 +1439,7 @@ function createTowerSlots() {
     enemySlot.dataset.slotIndex = String(i);
     enemySlot.style.left = `${slotPosAI[i].x * 100}%`;
     enemySlot.style.top = `${slotPosAI[i].y * 100}%`;
+    enemySlot.style.zIndex = i < 2 ? "5" : "4";
     enemySlotsEl.appendChild(enemySlot);
 
     const playerSlot = document.createElement("div");
@@ -1175,6 +1447,7 @@ function createTowerSlots() {
     playerSlot.dataset.slotIndex = String(i);
     playerSlot.style.left = `${slotPosPlayer[i].x * 100}%`;
     playerSlot.style.top = `${slotPosPlayer[i].y * 100}%`;
+    playerSlot.style.zIndex = i < 2 ? "4" : "5";
 
     playerSlot.addEventListener("dragover", (event) => {
       if (!isPlayerInputAllowed()) {
@@ -1845,7 +2118,7 @@ function openRoundShop() {
   console.warn(`[Game] advanceToNextRound called. waveNumber before increment=${state.waveNumber}`);
   const gain = 9 + state.waveNumber;
   state.playerMana = clamp(state.playerMana + gain, 0, MANA_CAP);
-  state.aiMana = clamp(state.aiMana + gain + AI_MANA_BONUS_PER_ROUND, 0, MANA_CAP);
+  state.aiMana = clamp(state.aiMana + gain + getAIManaBonusPerRound(), 0, MANA_CAP);
   state.roundManaBonusPending.player = 0;
   state.roundManaBonusPending.ai = 0;
   state.waveNumber += 1;
@@ -2016,6 +2289,7 @@ function totalDefenseScore(towers) {
 }
 
 function pickBestAITowerPlacement(mana, defenseBudget, playerDefenseScore, waveNumber) {
+  const difficulty = getAIDifficultySettings();
   const usedTowerTypes = new Set();
   const towerCounts = {};
   for (const tower of state.aiTowers) {
@@ -2038,12 +2312,12 @@ function pickBestAITowerPlacement(mana, defenseBudget, playerDefenseScore, waveN
       if (candidate.cost > mana || candidate.cost > defenseBudget) {
         continue;
       }
-      if (forceTowerDiversity && !missingTowerTypes.includes(candidate.id)) {
-        continue;
-      }
       const canUpgrade = !!existing
         && existing.id === candidate.id
         && existing.level < getTowerMaxLevel(candidate.id);
+      if (forceTowerDiversity && !missingTowerTypes.includes(candidate.id) && !(difficulty.considerTowerUpgrades && canUpgrade)) {
+        continue;
+      }
       const nextLevel = canUpgrade ? existing.level + 1 : 1;
       if (existing && existing.id === candidate.id && !canUpgrade) {
         continue;
@@ -2062,7 +2336,8 @@ function pickBestAITowerPlacement(mana, defenseBudget, playerDefenseScore, waveN
       const emptyBonus = existing ? 0 : 0.8;
       const diversityPriority = forceTowerDiversity ? 1.35 : 0;
       const upgradeBias = canUpgrade ? 0.65 : 0;
-      const value = improvement + counterBoost + emptyBonus + diversityPriority + upgradeBias - diversityPenalty - candidate.cost * 0.09 - expensiveEarlyPenalty + Math.random() * 0.08;
+      const difficultyBias = difficulty.towerWeights[candidate.id] || 0;
+      const value = improvement + counterBoost + emptyBonus + diversityPriority + upgradeBias + difficultyBias - diversityPenalty - candidate.cost * 0.09 - expensiveEarlyPenalty + Math.random() * difficulty.randomTowerNoise;
 
       if (!best || value > best.value) {
         best = { slotIndex, tower: candidate, value, nextLevel };
@@ -2074,6 +2349,17 @@ function pickBestAITowerPlacement(mana, defenseBudget, playerDefenseScore, waveN
 }
 
 function chooseAIBatchPattern(playerDefenseScore, waveNumber) {
+  const difficulty = getAIDifficultySettings();
+  if (difficulty.attackerPatterns?.length) {
+    if (playerDefenseScore < 6 || waveNumber <= 2) {
+      return difficulty.attackerPatterns[0];
+    }
+    if (playerDefenseScore > 10 && difficulty.attackerPatterns[2]) {
+      return difficulty.attackerPatterns[2];
+    }
+    return difficulty.attackerPatterns[1] || difficulty.attackerPatterns[0];
+  }
+
   if (playerDefenseScore < 6 || waveNumber <= 2) {
     return ["runner", "runner", "imp", "runner", "imp"];
   }
@@ -2109,9 +2395,17 @@ function queueAIBatch(pattern, attackBudget) {
 }
 
 function chooseAIAttackerByDefense(playerDefenseScore, mana, waveNumber) {
+  const difficulty = getAIDifficultySettings();
   const options = attackerDefs.filter((attacker) => attacker.cost <= mana);
   if (options.length === 0) {
     return null;
+  }
+
+  for (const attackerId of difficulty.fallbackOrder || []) {
+    const attacker = options.find((item) => item.id === attackerId);
+    if (attacker) {
+      return attacker;
+    }
   }
 
   const pressure = playerDefenseScore / Math.max(1, waveNumber);
@@ -2142,17 +2436,19 @@ function prepareAIMoves() {
     return;
   }
 
+  const difficulty = getAIDifficultySettings();
   const playerDefenseScore = totalDefenseScore(state.playerTowers);
   const minAttackerCost = Math.min(...attackerDefs.map((item) => item.cost));
   const isSpikeSaveRound = state.waveNumber % 3 === 0 || (state.waveNumber >= 6 && playerDefenseScore > 9);
-  const reserveTarget = isSpikeSaveRound
+  const baseReserveTarget = isSpikeSaveRound
     ? clamp(14 + state.waveNumber * 2.8, 18, 54)
     : clamp(7 + state.waveNumber * 1.5, 9, 30);
-  const defenseRatio = isSpikeSaveRound ? 0.14 : 0.22;
+  const reserveTarget = clamp(baseReserveTarget * difficulty.reserveScale, 5, 70);
+  const defenseRatio = (isSpikeSaveRound ? 0.14 : 0.22) * difficulty.defenseRatioScale;
   const attackBiasFloor = Math.max(0, state.aiMana - reserveTarget);
   let defenseBudget = Math.min(Math.max(0, state.aiMana * defenseRatio), attackBiasFloor);
   let placementCount = 0;
-  const maxPlacements = isSpikeSaveRound ? 1 : 2;
+  const maxPlacements = isSpikeSaveRound ? 1 : difficulty.maxPlacements;
 
   while (placementCount < maxPlacements) {
     const bestPlacement = pickBestAITowerPlacement(state.aiMana, defenseBudget, playerDefenseScore, state.waveNumber);
@@ -2171,9 +2467,9 @@ function prepareAIMoves() {
 
   const postDefenseReserve = isSpikeSaveRound
     ? reserveTarget
-    : clamp(reserveTarget * 0.55, 5, 22);
+    : clamp(reserveTarget * 0.55 * difficulty.postReserveScale, 2, 24);
   let sentCount = 0;
-  let attackBudget = Math.max(0, state.aiMana - postDefenseReserve);
+  let attackBudget = Math.max(0, (state.aiMana - postDefenseReserve) * difficulty.minAttackBudgetScale);
   const pattern = chooseAIBatchPattern(playerDefenseScore, state.waveNumber);
 
   while (attackBudget >= minAttackerCost) {
@@ -2182,7 +2478,7 @@ function prepareAIMoves() {
       break;
     }
     sentCount += sentInBatch;
-    attackBudget = Math.max(0, state.aiMana - postDefenseReserve);
+    attackBudget = Math.max(0, (state.aiMana - postDefenseReserve) * difficulty.minAttackBudgetScale);
   }
 
   if (sentCount === 0 && state.aiMana >= minAttackerCost) {
@@ -3645,6 +3941,45 @@ openRecordsBtnEl.addEventListener("click", () => {
   setScreen("records");
 });
 
+openOptionsBtnEl.addEventListener("click", () => {
+  setScreen("options");
+});
+
+optionsBackBtnEl.addEventListener("click", () => {
+  setScreen("menu");
+});
+
+difficultyListEl.addEventListener("click", (event) => {
+  const option = event.target.closest(".difficulty-option");
+  if (!option) {
+    return;
+  }
+  setDifficulty(option.dataset.difficulty);
+});
+
+artPackGridEl.addEventListener("click", (event) => {
+  if (event.target.closest(".artist-social-link")) {
+    return;
+  }
+  const option = event.target.closest(".art-pack-option");
+  if (!option) {
+    return;
+  }
+  setArtPack(option.dataset.artPack);
+});
+
+artPackGridEl.addEventListener("keydown", (event) => {
+  if (event.key !== "Enter" && event.key !== " ") {
+    return;
+  }
+  const option = event.target.closest(".art-pack-option");
+  if (!option) {
+    return;
+  }
+  event.preventDefault();
+  setArtPack(option.dataset.artPack);
+});
+
 recordsBackBtnEl.addEventListener("click", () => {
   setScreen("menu");
 });
@@ -3691,9 +4026,10 @@ matchHomeBtnEl.addEventListener("click", () => {
 });
 
 createTowerSlots();
-createCards();
 setupArenaDrop();
 updateViewportHeight();
+loadOptions();
+createCards();
 loadPersistentStats();
 resetMatch();
 const restoredMatch = restoreSavedMatchState();

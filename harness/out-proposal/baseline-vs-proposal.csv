@@ -1,0 +1,14 @@
+strategy,baseline_winRate,proposal_winRate,delta_pp,goal,verdict
+monoOrange,0.863,0.85,-1.3,nerf,marginal — barely moved
+monoViolet,0.849,0.839,-1.0,nerf,marginal — barely moved
+monoGreen,0.769,0.768,-0.1,mild nerf,no change
+rush,0.692,0.672,-2.0,n/a (attacker rush),partial — attacker nerfs helped
+monoYellow,0.573,0.652,+7.9,buff slow utility,strong success
+monoImp,0.646,0.589,-5.7,nerf,worked
+monoRunner,0.375,0.329,-4.6,nerf,worked
+default,0.295,0.317,+2.2,rise (heuristic improvement),tiny — heuristic still mistunes
+monoRed,0.306,0.242,-6.4,buff to ~50%,BACKFIRED — went down
+turtle,0.235,0.159,-7.6,n/a,collateral drop
+monoBrute,0.217,0.312,+9.5,buff,strong success
+monoWisp,0.084,0.145,+6.1,buff,worked
+monoTank,0,0.005,+0.5,buff,still broken — needs >10% change

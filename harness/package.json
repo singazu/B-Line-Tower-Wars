@@ -1,0 +1,12 @@
+{
+  "name": "tower-wars-harness",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "run": "node run.js",
+    "collect": "node collect.js"
+  },
+  "dependencies": {
+    "playwright": "^1.48.0"
+  }
+}

@@ -29,6 +29,10 @@
           <button id="open-records-btn" class="secondary" type="button">View Records</button>
         </div>
         <div class="menu-meta" id="menu-meta"></div>
+        <div class="menu-options-entry">
+          <button id="open-options-btn" class="secondary" type="button">Options</button>
+          <p class="menu-footer">Set difficulty, choose art and music.</p>
+        </div>
       </div>
 
       <section class="panel how-to-panel" aria-labelledby="how-to-title">
@@ -71,6 +75,48 @@
             <span>Each match is compact, but card choices and AI pressure keep it replayable.</span>
           </article>
         </div>
+      </section>
+    </section>
+
+    <section class="screen options-screen hidden" id="options-screen" aria-labelledby="options-title">
+      <div class="section-topline">
+        <div>
+          <p class="eyebrow">Options</p>
+          <h1 id="options-title">Match Settings</h1>
+        </div>
+        <button id="options-back-btn" class="secondary" type="button">Back</button>
+      </div>
+
+      <section class="panel options-panel" aria-labelledby="difficulty-title">
+        <div class="panel-header">
+          <h2 id="difficulty-title">AI Difficulty</h2>
+          <p id="difficulty-summary">Choose how sharply the AI drafts, attacks, and upgrades.</p>
+        </div>
+        <div class="difficulty-list" id="difficulty-list" role="radiogroup" aria-labelledby="difficulty-title">
+          <button class="difficulty-option difficulty-purple" type="button" role="radio" aria-checked="false" data-difficulty="purple" aria-label="Easy difficulty">
+            <span>Easy</span>
+          </button>
+          <button class="difficulty-option difficulty-yellow" type="button" role="radio" aria-checked="false" data-difficulty="yellow" aria-label="Medium difficulty">
+            <span>Medium</span>
+          </button>
+          <button class="difficulty-option difficulty-red" type="button" role="radio" aria-checked="false" data-difficulty="red" aria-label="Hard difficulty">
+            <span>Hard</span>
+          </button>
+          <button class="difficulty-option difficulty-green" type="button" role="radio" aria-checked="false" data-difficulty="green" aria-label="Very Hard difficulty">
+            <span>Very Hard</span>
+          </button>
+          <button class="difficulty-option difficulty-blue" type="button" role="radio" aria-checked="false" data-difficulty="blue" aria-label="Ludicrous difficulty">
+            <span>Ludicrous</span>
+          </button>
+        </div>
+      </section>
+
+      <section class="panel options-panel art-options-panel" aria-labelledby="art-title">
+        <div class="panel-header">
+          <h2 id="art-title">Art</h2>
+          <p id="art-summary">Choose the battlefield, tower, and creep skin set.</p>
+        </div>
+        <div class="art-pack-grid" id="art-pack-grid" role="radiogroup" aria-labelledby="art-title"></div>
       </section>
     </section>
 
