@@ -189,8 +189,8 @@ const DEFAULT_OPTIONS = {
   artPack: "jonCarling"
 };
 const ART_PACK_OPTIONS = [
-  { id: "jonCarling", name: "Jon Carling", unlocked: true, icon: "assets/ui/artist-icons/joncarling.png", instagram: "https://www.instagram.com/joncarling/", preview: { creeps: ["imp", "runner"], towers: ["violet", "yellow"] } },
-  { id: "unfuneralOD", name: "UnfuneralOD", unlocked: true, icon: "assets/ui/artist-icons/unfuneralod.png", instagram: "https://www.instagram.com/unfuneralod/", preview: { creeps: ["imp", "runner"], towers: ["violet", "green"] } },
+  { id: "jonCarling", name: "Jon Carling", unlocked: true, icon: "assets/ui/artist-icons/joncarling.png", instagram: "https://www.instagram.com/joncarling/", quadBackground: "assets/arena/quad-backgrounds/joncarling.png", preview: { creeps: ["imp", "runner"], towers: ["violet", "yellow"] } },
+  { id: "unfuneralOD", name: "UnfuneralOD", unlocked: true, icon: "assets/ui/artist-icons/unfuneralod.png", instagram: "https://www.instagram.com/unfuneralod/", quadBackground: "assets/arena/quad-backgrounds/unfuneralod.png", preview: { creeps: ["imp", "runner"], towers: ["violet", "green"] } },
   { id: "artist3", name: "Artist Slot 3", unlocked: false, preview: { creeps: ["imp", "runner"], towers: ["red", "blue"] } },
   { id: "artist4", name: "Artist Slot 4", unlocked: false, preview: { creeps: ["brute", "wisp"], towers: ["violet", "yellow"] } },
   { id: "artist5", name: "Artist Slot 5", unlocked: false, preview: { creeps: ["runner", "tank"], towers: ["green", "blue"] } },
@@ -1017,6 +1017,9 @@ function renderArtPackOptions() {
     const iconLink = option.icon && option.instagram
       ? `<a class="artist-social-link" href="${option.instagram}" target="_blank" rel="noopener noreferrer" aria-label="${option.name} Instagram"><img src="${option.icon}" alt="" /></a>`
       : "";
+    const thumbnailStyle = option.quadBackground
+      ? ` style="--quad-bg: url('${option.quadBackground}');"`
+      : "";
     const thumbnailCells = option.unlocked
       ? `
           <span class="art-thumb-cell">${getAttackerPreviewMarkup(pack, preview.creeps[0], `${option.name} creep`)}</span>
@@ -1032,7 +1035,7 @@ function renderArtPackOptions() {
         `;
     return `
       <div class="art-pack-option${option.unlocked ? "" : " locked"}" role="radio" tabindex="${option.unlocked ? "0" : "-1"}" aria-checked="false" data-art-pack="${option.id}" ${option.unlocked ? "" : "aria-disabled=\"true\""} aria-label="${option.name}${option.unlocked ? "" : " locked"}">
-        <span class="art-thumb-grid" aria-hidden="true">
+        <span class="art-thumb-grid" aria-hidden="true"${thumbnailStyle}>
           ${thumbnailCells}
         </span>
         <span class="art-pack-name-row">
