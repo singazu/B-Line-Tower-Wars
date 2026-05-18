@@ -19,6 +19,10 @@
   --safe-bottom: env(safe-area-inset-bottom, 0px);
   --safe-left: env(safe-area-inset-left, 0px);
   --app-height: 100vh;
+  --game-frame-width: 420px;
+  --game-frame-height: 760px;
+  --game-frame-scale: 1;
+  --game-frame-aspect: 0.5526315789;
 }
 
 * {
@@ -68,9 +72,13 @@ select {
     calc(1rem + var(--safe-left));
 }
 
-.app-shell.desktop-game-fit {
+.app-shell.game-active {
   display: grid;
   justify-items: center;
+  align-items: start;
+  max-width: none;
+  min-height: var(--app-height);
+  overflow-x: hidden;
 }
 
 #game-screen {
@@ -560,26 +568,19 @@ select {
 
 .game-screen {
   display: grid;
-  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  width: var(--game-frame-width);
+  max-width: 100%;
+  grid-template-rows: var(--game-frame-height) auto;
   gap: 0.75rem;
+  justify-self: center;
 }
 
-.game-screen.desktop-game-fit {
-  width: 100%;
-  min-height: 0;
-}
-
-.top-bar {
-  padding: 0.25rem 0;
-}
-
-.top-bar-brand h1 {
-  margin: 0;
-  font-size: 1.6rem;
+.game-screen.desktop-debug-preview {
+  margin-inline: auto;
 }
 
 .hud-strip {
-  display: grid;
+  display: none;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 0.6rem;
 }
@@ -606,6 +607,8 @@ select {
 }
 
 .arena-zone {
+  width: var(--game-frame-width);
+  height: var(--game-frame-height);
   min-height: 0;
   display: grid;
   place-items: center;
@@ -613,9 +616,12 @@ select {
 
 .arena-wrap {
   position: relative;
-  height: 100%;
-  min-height: 420px;
-  border: 1px solid rgba(148, 163, 184, 0.25);
+  width: var(--game-frame-width);
+  height: var(--game-frame-height);
+  min-height: 0;
+  aspect-ratio: 420 / 760;
+  border: 0;
+  outline: 1px solid rgba(148, 163, 184, 0.25);
   border-radius: 1.45rem;
   overflow: hidden;
   background: #ddd;
@@ -637,8 +643,8 @@ select {
 }
 
 .tower-slot {
-  width: 3.7rem;
-  height: 3.55rem;
+  width: 14.0476%;
+  height: 7.5%;
   border-radius: 0.7rem;
   border: 1px solid #2b4f6f;
   background: var(--slot-empty);
@@ -691,8 +697,8 @@ select {
 
 .tower-icon-slot {
   --tower-scale: 1;
-  width: 96px;
-  height: 96px;
+  width: 163%;
+  height: 168%;
   image-rendering: auto;
   display: block;
   position: absolute;
@@ -708,19 +714,52 @@ select {
 
 .timer-widget {
   position: absolute;
-  left: 10px;
+  left: 2.381%;
   top: 50%;
   transform: translateY(-50%);
+  width: 15.7143%;
+  height: 34.2105%;
   z-index: 4;
   display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto auto;
   justify-items: center;
   gap: 0.35rem;
   pointer-events: auto;
 }
 
+.round-widget,
+.score-widget {
+  min-width: 100%;
+  display: grid;
+  justify-items: center;
+  align-content: center;
+  gap: 0.06rem;
+  padding: 0.24rem 0.32rem;
+  border: 1px solid rgba(15, 23, 42, 0.28);
+  border-radius: 0.58rem;
+  background: rgba(248, 250, 252, 0.72);
+  color: #0f172a;
+  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.14);
+  line-height: 1;
+}
+
+.round-widget span,
+.score-widget span {
+  font-size: 0.54rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.round-widget strong,
+.score-widget strong {
+  font-size: 1rem;
+  font-weight: 900;
+}
+
 .timer-track {
-  width: 0.9rem;
-  height: 9rem;
+  width: 22%;
+  height: 100%;
   border: 1px solid rgba(148, 163, 184, 0.9);
   border-radius: 999px;
   overflow: hidden;
@@ -745,7 +784,7 @@ select {
 }
 
 .battle-skip-btn {
-  min-width: 3.1rem;
+  min-width: 100%;
   padding: 0.22rem 0.36rem;
   font-size: 0.65rem;
   line-height: 1;
@@ -755,13 +794,23 @@ select {
 }
 
 .mana-widget {
+  position: relative;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 1;
+  pointer-events: none;
+}
+
+.mana-stack {
   position: absolute;
-  right: 0.55rem;
+  right: 2.1429%;
   top: 50%;
   transform: translateY(-50%);
-  width: 64px;
-  height: 64px;
+  width: 17.1429%;
   z-index: 4;
+  display: grid;
+  justify-items: stretch;
+  gap: 0.32rem;
   pointer-events: none;
 }
 
@@ -785,12 +834,8 @@ select {
 
 .shop-overlay,
 .match-end-overlay {
-  position: fixed;
-  inset:
-    calc(0.5rem + var(--safe-top))
-    calc(0.5rem + var(--safe-right))
-    calc(0.5rem + var(--safe-bottom))
-    calc(0.5rem + var(--safe-left));
+  position: absolute;
+  inset: 0;
   z-index: 220;
   display: grid;
   align-items: center;
@@ -991,14 +1036,18 @@ select {
 .bottom-bar {
   display: grid;
   gap: 0.7rem;
+  min-width: 0;
 }
 
 .card-docks {
   display: grid;
   gap: 0.45rem;
+  min-width: 0;
 }
 
 .dock {
+  container-type: inline-size;
+  min-width: 0;
   border: 1px solid rgba(17, 24, 39, 0.35);
   border-radius: 1.2rem;
   background-color: #efe5cf;
@@ -1020,7 +1069,7 @@ select {
 
 .dock-label-image {
   display: block;
-  height: 30px;
+  height: clamp(20px, 7.1429cqw, 30px);
   width: auto;
   image-rendering: auto;
   max-width: 100%;
@@ -1052,7 +1101,7 @@ select {
 .attacker-panel {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 0.42rem;
+  gap: clamp(0.25rem, 1.6%, 0.42rem);
 }
 
 .card {
@@ -1062,8 +1111,9 @@ select {
   padding: 0.14rem;
   cursor: grab;
   user-select: none;
-  min-height: 4.2rem;
-  min-width: 3.15rem;
+  aspect-ratio: 0.82;
+  min-height: 0;
+  min-width: 0;
   display: grid;
   align-content: center;
   justify-items: center;
@@ -1075,7 +1125,7 @@ select {
 }
 
 .tower-panel .card.tower {
-  min-height: 4.2rem;
+  min-height: 0;
   padding: 0.12rem;
 }
 
@@ -1094,8 +1144,8 @@ select {
 }
 
 .attacker-icon-card {
-  width: 66px;
-  height: 66px;
+  width: 118%;
+  height: 118%;
   position: absolute;
   left: 50%;
   top: 50%;
@@ -1111,8 +1161,8 @@ select {
 }
 
 .tower-icon-card {
-  width: 76px;
-  height: 76px;
+  width: 126%;
+  height: 126%;
   position: absolute;
   left: 50%;
   top: 50%;
@@ -1190,16 +1240,24 @@ select {
   align-items: center;
   gap: 0.65rem;
   padding: 0.1rem 0;
-  min-height: 48px;
+  min-width: 0;
+  min-height: 40px;
 }
 
 #status-text {
   flex: 1;
+  min-width: 0;
   font-size: 0.82rem;
   line-height: 1.35;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+#game-screen button {
+  min-height: 40px;
+  padding: 0.52rem 0.72rem;
+  font-size: 0.82rem;
 }
 
 button {
@@ -1261,6 +1319,14 @@ button:disabled {
       calc(0.45rem + var(--safe-left));
   }
 
+  .app-shell.game-active {
+    padding:
+      calc(0.4rem + var(--safe-top))
+      calc(0.45rem + var(--safe-right))
+      calc(0.4rem + var(--safe-bottom))
+      calc(0.45rem + var(--safe-left));
+  }
+
   .game-screen {
     gap: 0.45rem;
   }
@@ -1268,11 +1334,6 @@ button:disabled {
   .shop-overlay,
   .match-end-overlay {
     align-items: start;
-    inset:
-      calc(0.35rem + var(--safe-top))
-      calc(0.35rem + var(--safe-right))
-      calc(0.35rem + var(--safe-bottom))
-      calc(0.35rem + var(--safe-left));
   }
 
   .match-summary-card {
@@ -1315,12 +1376,7 @@ button:disabled {
   }
 
   .arena-wrap {
-    min-height: 0;
     border-radius: 1rem;
-  }
-
-  .timer-track {
-    height: 6rem;
   }
 
   .bottom-bar {
@@ -1350,12 +1406,11 @@ button:disabled {
   }
 
   .card {
-    min-height: 3.95rem;
     min-width: 0;
   }
 
   .tower-panel .card.tower {
-    min-height: 3.95rem;
+    min-height: 0;
   }
 }
 
@@ -1366,6 +1421,14 @@ button:disabled {
       calc(0.75rem + var(--safe-right))
       calc(0.75rem + var(--safe-bottom))
       calc(0.75rem + var(--safe-left));
+  }
+
+  .app-shell.game-active {
+    padding:
+      calc(0.4rem + var(--safe-top))
+      calc(0.45rem + var(--safe-right))
+      calc(0.4rem + var(--safe-bottom))
+      calc(0.45rem + var(--safe-left));
   }
 
   .screen {
@@ -1386,25 +1449,17 @@ button:disabled {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
-  .arena-wrap {
-    min-height: 360px;
-  }
-
-  .timer-track {
-    height: 7rem;
-  }
-
   .tower-panel,
   .attacker-panel {
     gap: 0.3rem;
   }
 
   .card {
-    min-height: 3.85rem;
+    min-height: 0;
   }
 
   .tower-panel .card.tower {
-    min-height: 3.2rem;
+    min-height: 0;
   }
 }
 

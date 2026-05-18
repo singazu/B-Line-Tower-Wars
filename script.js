@@ -349,6 +349,9 @@ const towerPanelEl = document.getElementById("tower-panel");
 const attackerPanelEl = document.getElementById("attacker-panel");
 const arenaZoneEl = document.querySelector(".arena-zone");
 const arenaDropZoneEl = document.getElementById("arena-drop-zone");
+const topBarEl = document.querySelector(".top-bar");
+const hudStripEl = document.querySelector(".hud-strip");
+const bottomBarEl = document.querySelector(".bottom-bar");
 const progressBtnEl = document.getElementById("progress-btn");
 const homeBtnEl = document.getElementById("home-btn");
 
@@ -357,7 +360,10 @@ const ctx = canvas.getContext("2d");
 const BATTLEFIELD_BOTTOM_TRIM_PX = 10;
 const FIELD_SHIFT_Y = BATTLEFIELD_BOTTOM_TRIM_PX / LOGICAL_CANVAS_HEIGHT;
 const prefersTouchInput = window.matchMedia("(pointer: coarse)").matches || ("ontouchstart" in window);
-const DESKTOP_GAME_WIDTH = 430;
+const MIN_GAME_FRAME_SCALE = 0.5;
+const MAX_PHONE_FRAME_SCALE = 1;
+const MAX_DESKTOP_PREVIEW_SCALE = 1;
+const GAME_FRAME_ASPECT = LOGICAL_CANVAS_WIDTH / LOGICAL_CANVAS_HEIGHT;
 
 const state = {
   screen: "menu",
@@ -461,76 +467,110 @@ const slotPosPlayer = towerPosPlayer;
 const slotPosAI = towerPosAI;
 let persistentStats = createEmptyPersistentStats();
 let statsSaveTimeout = null;
+let gameFrameLayout = {
+  viewportWidth: LOGICAL_CANVAS_WIDTH,
+  viewportHeight: LOGICAL_CANVAS_HEIGHT,
+  frameWidth: LOGICAL_CANVAS_WIDTH,
+  frameHeight: LOGICAL_CANVAS_HEIGHT,
+  scale: 1,
+  reservedHeight: 0,
+  desktopPreview: false
+};
 
-function updateViewportHeight() {
-  const height = Math.round(window.visualViewport?.height || window.innerHeight || document.documentElement.clientHeight);
-  document.documentElement.style.setProperty("--app-height", `${height}px`);
-  updateDesktopGameFit();
+function readVisualViewportSize() {
+  return {
+    width: Math.round(window.visualViewport?.width || window.innerWidth || document.documentElement.clientWidth || LOGICAL_CANVAS_WIDTH),
+    height: Math.round(window.visualViewport?.height || window.innerHeight || document.documentElement.clientHeight || LOGICAL_CANVAS_HEIGHT)
+  };
 }
 
-function isDesktopGameFitViewport() {
+function readPixelValue(value) {
+  const parsed = Number.parseFloat(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function getShellContentBox(viewportWidth, viewportHeight) {
+  const shellStyles = window.getComputedStyle(appShellEl);
+  const paddingLeft = readPixelValue(shellStyles.paddingLeft);
+  const paddingRight = readPixelValue(shellStyles.paddingRight);
+  const paddingTop = readPixelValue(shellStyles.paddingTop);
+  const paddingBottom = readPixelValue(shellStyles.paddingBottom);
+  return {
+    width: Math.max(1, viewportWidth - paddingLeft - paddingRight),
+    height: Math.max(1, viewportHeight - paddingTop - paddingBottom)
+  };
+}
+
+function isDesktopDebugPreviewViewport() {
   return window.matchMedia("(min-width: 901px) and (pointer: fine)").matches;
 }
 
-function updateDesktopGameFit() {
-  const shouldFitDesktopGame = state.screen === "game" && isDesktopGameFitViewport();
-  appShellEl.classList.toggle("desktop-game-fit", shouldFitDesktopGame);
-  gameScreenEl.classList.toggle("desktop-game-fit", shouldFitDesktopGame);
-
-  if (!shouldFitDesktopGame) {
-    gameScreenEl.style.removeProperty("zoom");
-    gameScreenEl.style.removeProperty("max-width");
-    gameScreenEl.style.removeProperty("margin-inline");
-    return;
+function measureGameChromeHeight() {
+  if (state.screen !== "game") {
+    return 0;
   }
-
-  gameScreenEl.style.setProperty("max-width", `${DESKTOP_GAME_WIDTH}px`);
-  gameScreenEl.style.setProperty("margin-inline", "auto");
-  gameScreenEl.style.setProperty("zoom", "1");
-
-  const shellStyles = window.getComputedStyle(appShellEl);
-  const shellPaddingTop = Number.parseFloat(shellStyles.paddingTop) || 0;
-  const shellPaddingBottom = Number.parseFloat(shellStyles.paddingBottom) || 0;
-  const availableHeight = Math.max(
-    320,
-    (window.visualViewport?.height || window.innerHeight) - shellPaddingTop - shellPaddingBottom
+  const screenStyles = window.getComputedStyle(gameScreenEl);
+  const rowGap = readPixelValue(screenStyles.rowGap);
+  return Math.ceil(
+    (topBarEl?.getBoundingClientRect().height || 0) +
+    (hudStripEl?.getBoundingClientRect().height || 0) +
+    (bottomBarEl?.getBoundingClientRect().height || 0) +
+    rowGap * 3
   );
-  const naturalHeight = Math.max(1, gameScreenEl.scrollHeight);
-  const fitScale = Math.min(1, availableHeight / naturalHeight);
-  gameScreenEl.style.setProperty("zoom", fitScale.toFixed(3));
+}
+
+function applyGameFrameLayout(layout) {
+  gameFrameLayout = layout;
+  document.documentElement.style.setProperty("--app-height", `${layout.viewportHeight}px`);
+  document.documentElement.style.setProperty("--game-frame-width", `${layout.frameWidth}px`);
+  document.documentElement.style.setProperty("--game-frame-height", `${layout.frameHeight}px`);
+  document.documentElement.style.setProperty("--game-frame-scale", layout.scale.toFixed(4));
+  document.documentElement.style.setProperty("--game-frame-aspect", String(GAME_FRAME_ASPECT));
+  appShellEl.classList.toggle("game-active", state.screen === "game");
+  gameScreenEl.classList.toggle("desktop-debug-preview", layout.desktopPreview);
+}
+
+function calculateGameFrameLayout() {
+  const viewport = readVisualViewportSize();
+  const desktopPreview = state.screen === "game" && isDesktopDebugPreviewViewport();
+  const shellBox = getShellContentBox(viewport.width, viewport.height);
+  const maxScale = desktopPreview ? MAX_DESKTOP_PREVIEW_SCALE : MAX_PHONE_FRAME_SCALE;
+  let scale = Math.min(maxScale, shellBox.width / LOGICAL_CANVAS_WIDTH);
+
+  applyGameFrameLayout({
+    ...gameFrameLayout,
+    viewportWidth: viewport.width,
+    viewportHeight: viewport.height,
+    frameWidth: Math.round(LOGICAL_CANVAS_WIDTH * scale),
+    frameHeight: Math.round(LOGICAL_CANVAS_HEIGHT * scale),
+    scale,
+    desktopPreview
+  });
+
+  // Docks and HUD depend on frame width, so measure after applying a first pass.
+  for (let i = 0; i < 2; i += 1) {
+    const reservedHeight = measureGameChromeHeight();
+    const heightScale = (shellBox.height - reservedHeight) / LOGICAL_CANVAS_HEIGHT;
+    scale = Math.min(maxScale, shellBox.width / LOGICAL_CANVAS_WIDTH, heightScale);
+    scale = Math.max(MIN_GAME_FRAME_SCALE, scale);
+    applyGameFrameLayout({
+      viewportWidth: viewport.width,
+      viewportHeight: viewport.height,
+      frameWidth: Math.round(LOGICAL_CANVAS_WIDTH * scale),
+      frameHeight: Math.round(LOGICAL_CANVAS_HEIGHT * scale),
+      scale,
+      reservedHeight,
+      desktopPreview
+    });
+  }
+}
+
+function updateViewportHeight() {
+  calculateGameFrameLayout();
 }
 
 function resizeBattlefieldFrame() {
-  if (state.screen !== "game") {
-    updateDesktopGameFit();
-    return;
-  }
-
-  const zoneRect = arenaZoneEl.getBoundingClientRect();
-  if (!zoneRect.width || !zoneRect.height) {
-    return;
-  }
-
-  const aspect = LOGICAL_CANVAS_WIDTH / LOGICAL_CANVAS_HEIGHT;
-  const maxWidth = Math.max(220, zoneRect.width);
-  const maxHeight = Math.max(260, zoneRect.height);
-  const isMobilePortrait = window.matchMedia("(pointer: coarse) and (orientation: portrait)").matches;
-  let frameWidth = maxWidth;
-  let frameHeight = frameWidth / aspect;
-
-  if (isMobilePortrait) {
-    // On phone portrait, prioritize fitting the full gameplay UI in one screen.
-    const viewportHeight = window.visualViewport?.height || window.innerHeight || document.documentElement.clientHeight;
-    const cappedHeight = Math.max(280, Math.min(maxHeight, viewportHeight * 0.48));
-    frameHeight = cappedHeight;
-  } else if (frameHeight > maxHeight) {
-    frameHeight = maxHeight;
-    frameWidth = frameHeight * aspect;
-  }
-
-  arenaDropZoneEl.style.width = `${Math.round(frameWidth)}px`;
-  arenaDropZoneEl.style.height = `${Math.round(frameHeight)}px`;
-  updateDesktopGameFit();
+  calculateGameFrameLayout();
 }
 
 function updateOrientationNotice() {
@@ -1206,7 +1246,6 @@ function setScreen(screen) {
   refreshRecordsUI();
   updateOrientationNotice();
   requestAnimationFrame(resizeBattlefieldFrame);
-  requestAnimationFrame(updateDesktopGameFit);
 }
 
 function recordUnitScore(attackerId, owner) {
@@ -3879,8 +3918,23 @@ function gameLoop(timestamp) {
   requestAnimationFrame(gameLoop);
 }
 
+function returnToMenuFromMatch() {
+  if (state.hasActiveMatch && !state.gameOver) {
+    if (multiplayerRole !== null) {
+      window.Lobby && Lobby.endSession();
+      clearSavedMatchState();
+      state.hasActiveMatch = false;
+    } else {
+      state.paused = true;
+      updateStatus("Match paused from the menu.");
+      saveMatchStateNow();
+    }
+  }
+  setScreen("menu");
+}
+
 replayBtnEl.addEventListener("click", () => {
-  startNewMatch();
+  returnToMenuFromMatch();
 });
 
 battleSkipBtnEl.addEventListener("click", () => {
@@ -3987,7 +4041,7 @@ recordsBackBtnEl.addEventListener("click", () => {
   setScreen("menu");
 });
 
-progressBtnEl.addEventListener("click", () => {
+progressBtnEl?.addEventListener("click", () => {
   if (state.hasActiveMatch && !state.gameOver) {
     if (multiplayerRole !== null) {
       window.Lobby && Lobby.endSession();
@@ -4001,31 +4055,20 @@ progressBtnEl.addEventListener("click", () => {
   setScreen("records");
 });
 
-homeBtnEl.addEventListener("click", () => {
-  if (state.hasActiveMatch && !state.gameOver) {
-    if (multiplayerRole !== null) {
-      window.Lobby && Lobby.endSession();
-      clearSavedMatchState();
-      state.hasActiveMatch = false;
-    } else {
-      state.paused = true;
-      updateStatus("Match paused from the menu.");
-      saveMatchStateNow();
-    }
-  }
-  setScreen("menu");
+homeBtnEl?.addEventListener("click", () => {
+  returnToMenuFromMatch();
 });
 
 matchPlayAgainBtnEl.addEventListener("click", () => {
   startNewMatch();
 });
 
-matchRecordsBtnEl.addEventListener("click", () => {
+matchRecordsBtnEl?.addEventListener("click", () => {
   setScreen("records");
 });
 
 matchHomeBtnEl.addEventListener("click", () => {
-  setScreen("menu");
+  returnToMenuFromMatch();
 });
 
 createTowerSlots();

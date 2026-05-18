@@ -15,6 +15,13 @@ For this art pass, you are producing assets for the Battlefield Canvas plus unit
 - Export size: `420 x 760` pixels
 - Format: PNG-24, sRGB
 
+Mobile viewport contract:
+- Treat `420 x 760` as the gameplay-safe battlefield export, not as proof that every device will show useful surrounding space.
+- The game scales this frame uniformly in Capacitor/mobile WebViews. It never stretches the battlefield wider or taller independently.
+- Wider, taller, tablet, or desktop screens may show letterboxing, pillarboxing, or decorative fill outside the gameplay frame, but they must not reveal extra playable battlefield.
+- Keep critical details, focal characters, readable symbols, and contrast decisions inside the `420 x 760` gameplay-safe area.
+- If possible, keep layered or higher-resolution source with bleed beyond the production crop so engineering can create future decorative fills without changing gameplay visibility.
+
 Use this visual placement guide while painting:
 - `assets/arena/artist-guide-overlay.svg`
 

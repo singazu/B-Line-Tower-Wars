@@ -165,38 +165,16 @@
     </section>
 
     <section class="screen game-screen hidden" id="game-screen" aria-label="Game screen">
-      <header class="top-bar">
-        <div class="top-bar-brand">
-          <p class="eyebrow">Strategy Match</p>
-          <h1>Line Tower Wars</h1>
-        </div>
-        <div class="top-bar-actions">
-          <button id="progress-btn" class="secondary" type="button">Records</button>
-          <button id="home-btn" class="secondary" type="button">Menu</button>
-        </div>
-      </header>
-
-      <section class="hud-strip" aria-label="Match status">
-        <div class="hud-chip">
-          <span>Player</span>
-          <strong id="player-score">0</strong>
-        </div>
-        <div class="hud-chip">
-          <span id="opponent-label">AI</span>
-          <strong id="ai-score">0</strong>
-        </div>
-        <div class="hud-chip">
-          <span>Round</span>
-          <strong id="wave-number">1</strong>
-          <span class="connection-dot hidden" id="connection-dot" aria-hidden="true"></span>
-        </div>
-      </section>
-
       <section class="arena-zone">
         <div class="arena-wrap" id="arena-drop-zone">
           <div class="slot-row enemy-slots" id="enemy-slots"></div>
           <canvas id="arena-canvas" width="420" height="760" aria-label="Battlefield"></canvas>
           <div class="timer-widget" aria-label="Wave timer">
+            <div class="round-widget" aria-label="Round">
+              <span>Round</span>
+              <strong id="wave-number">1</strong>
+              <span class="connection-dot hidden" id="connection-dot" aria-hidden="true"></span>
+            </div>
             <div class="timer-track">
               <div class="timer-fill" id="wave-progress-fill"></div>
             </div>
@@ -206,9 +184,19 @@
             </div>
             <button class="battle-skip-btn" id="battle-skip-btn" type="button">Battle</button>
           </div>
-          <div class="mana-widget" aria-label="Player mana">
-            <img class="mana-icon" src="assets/ui/mana-icon.png" alt="" />
-            <span class="mana-value" id="player-mana">9</span>
+          <div class="mana-stack" aria-label="Mana and score">
+            <div class="score-widget opponent-score-widget" aria-label="Opponent score">
+              <span id="opponent-label">AI</span>
+              <strong id="ai-score">0</strong>
+            </div>
+            <div class="mana-widget" aria-label="Player mana">
+              <img class="mana-icon" src="assets/ui/mana-icon.png" alt="" />
+              <span class="mana-value" id="player-mana">9</span>
+            </div>
+            <div class="score-widget player-score-widget" aria-label="Player score">
+              <span>Player</span>
+              <strong id="player-score">0</strong>
+            </div>
           </div>
           <section class="shop-overlay hidden" id="shop-overlay" aria-label="Upgrade shop">
             <div class="shop-card">
@@ -260,7 +248,6 @@
               <p class="match-next-goal" id="match-next-goal">Next goal: win two matches in a row.</p>
               <div class="match-actions">
                 <button id="match-play-again-btn" type="button">Play Again</button>
-                <button id="match-records-btn" class="secondary" type="button">View Records</button>
                 <button id="match-home-btn" class="secondary" type="button">Return to Menu</button>
               </div>
             </div>
@@ -287,7 +274,7 @@
           </section>
         </div>
         <div class="action-row">
-          <button id="replay-btn" type="button">New Match</button>
+          <button id="replay-btn" type="button">Menu</button>
           <span id="status-text">Start a match, build your lane, and send the next wave.</span>
           <button id="pause-btn" type="button">Pause</button>
         </div>
